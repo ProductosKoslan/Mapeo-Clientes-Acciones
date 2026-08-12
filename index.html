@@ -302,6 +302,20 @@
   .hist-item.tipo-visita{ border-color:var(--lp-03); } .hist-item.tipo-visita::before{ background:var(--lp-03); }
   .hist-item.tipo-capacitacion{ border-color:var(--lp-05); } .hist-item.tipo-capacitacion::before{ background:var(--lp-05); }
   .hist-item.tipo-accion{ border-color:var(--lp-07); } .hist-item.tipo-accion::before{ background:var(--lp-07); }
+  .hist-item.completada{ opacity:.62; }
+  .hist-item.completada .hist-desc{ text-decoration:line-through; text-decoration-color:var(--ink-faint); }
+  .hist-actions{ display:flex; gap:10px; margin-top:6px; }
+  .hist-actions button{
+    border:none; background:none; cursor:pointer; font-size:11px; font-weight:600; padding:0;
+    color:var(--ink-faint); text-decoration:underline;
+  }
+  .hist-actions button:hover{ color:var(--teal-dark); }
+  .hist-actions button.done-btn{ color:var(--teal-dark); }
+  .hist-actions button.done-btn.is-done{ color:var(--amber); }
+  .tag-done{ background:var(--teal-soft); color:var(--teal-dark); }
+  .tag-pot-alto{ background:#DCEEDC; color:#2E7D32; }
+  .tag-pot-medio{ background:var(--amber-soft); color:var(--amber); }
+  .tag-pot-bajo{ background:var(--surface-2); color:var(--ink-soft); }
   .hist-top{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .hist-date{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-faint); }
   .hist-desc{ font-size:13px; margin-top:4px; color:var(--ink); line-height:1.4; }
@@ -400,6 +414,23 @@
                 <option value="sin">Sin actividad registrada</option>
               </select>
             </div>
+            <div class="filter-group">
+              <label>Tipo de actividad</label>
+              <div class="chip-select" id="filter-tipo-actividad"></div>
+            </div>
+            <div class="filter-group">
+              <label>Potencial en línea</label>
+              <div class="chip-select" id="filter-potencial-linea"></div>
+            </div>
+            <div class="filter-group">
+              <label>Categoría de potencial</label>
+              <select id="filter-potencial-categoria">
+                <option value="">Todas</option>
+                <option value="Alto">Alto</option>
+                <option value="Medio">Medio</option>
+                <option value="Bajo">Bajo</option>
+              </select>
+            </div>
           </div>
           <div class="filtros-panel-footer">
             <button class="btn-clear" id="btn-clear-filters">Limpiar filtros</button>
@@ -465,13 +496,14 @@
       <div class="modal-sub"><span id="modal-client-city">—</span><span id="modal-client-canal"></span></div>
       <div class="tabs">
         <button class="tab-btn active" data-tab="seguimiento">Seguimiento</button>
+        <button class="tab-btn" data-tab="potencial">Potencial</button>
         <button class="tab-btn" data-tab="ventas">Ventas (complementario)</button>
       </div>
     </div>
     <div class="tab-body">
       <div class="tab-panel active" id="panel-seguimiento">
         <div class="form-card">
-          <h4>Registrar nueva actividad</h4>
+          <h4 id="form-titulo">Registrar nueva actividad</h4>
           <div class="form-grid">
             <div class="field">
               <label>Fecha de registro</label>
@@ -493,19 +525,53 @@
               <label>Descripción de registro</label>
               <textarea id="f-descripcion" placeholder="Detalle de la visita, capacitación o acción realizada..."></textarea>
             </div>
-            <div class="field">
+            <div class="field" id="f-fecha-seguimiento-wrap">
               <label>Fecha de seguimiento</label>
               <input type="date" id="f-fecha-seguimiento">
+              <span style="font-size:10.5px;color:var(--ink-faint);">Solo aplica a Acción</span>
             </div>
           </div>
           <div class="form-actions">
             <span class="save-msg" id="save-msg"></span>
+            <button class="btn-clear" id="btn-cancelar-edicion" style="display:none;">Cancelar edición</button>
             <button class="btn-primary" id="btn-guardar">Guardar actividad</button>
           </div>
         </div>
 
         <div class="hist-title">Historial registrado</div>
         <div id="hist-list"></div>
+      </div>
+
+      <div class="tab-panel" id="panel-potencial">
+        <div class="form-card">
+          <h4 id="form-potencial-titulo">Registrar potencial del cliente</h4>
+          <div class="form-grid">
+            <div class="field">
+              <label>Línea de producto</label>
+              <select id="p-linea-producto"></select>
+            </div>
+            <div class="field">
+              <label>Categoría de potencial</label>
+              <select id="p-categoria">
+                <option value="Alto">Alto</option>
+                <option value="Medio">Medio</option>
+                <option value="Bajo">Bajo</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label>Comentario (opcional)</label>
+              <textarea id="p-comentario" placeholder="Detalle del potencial identificado..."></textarea>
+            </div>
+          </div>
+          <div class="form-actions">
+            <span class="save-msg" id="save-msg-potencial"></span>
+            <button class="btn-clear" id="btn-cancelar-edicion-potencial" style="display:none;">Cancelar edición</button>
+            <button class="btn-primary" id="btn-guardar-potencial">Registrar potencial</button>
+          </div>
+        </div>
+
+        <div class="hist-title">Potencial registrado</div>
+        <div id="potencial-list"></div>
       </div>
 
       <div class="tab-panel" id="panel-ventas">
@@ -592,17 +658,38 @@ function rebuildActividadesIndex(){
   });
 }
 
+function esCompletada(a){
+  return a.Completada === true || a.Completada === 'TRUE' || a.Completada === 'true';
+}
+
+let potencial = []; // desde Google Sheet
+let potencialByCliente = {};
+
+function rebuildPotencialIndex(){
+  potencialByCliente = {};
+  potencial.forEach(p => {
+    if(!potencialByCliente[p.Cliente]) potencialByCliente[p.Cliente] = [];
+    potencialByCliente[p.Cliente].push(p);
+  });
+}
+
 // venta neta del año más reciente presente en los datos, por cliente (para filtro de monto) — recalculable
 let ventaTotalByCliente = {};
 let ventaMaxGlobal = 0;
 let anoActualVentas = '';
+let anoAnteriorVentas = '';
 
 function recomputeVentaTotals(){
-  // el "año actual" es el más reciente que exista en los datos de venta cargados,
-  // así se ajusta solo cuando se sube una nueva base (2025→2026, luego 2026→2027, etc.)
+  // el "año actual" es el más reciente que exista en los datos de venta cargados (global,
+  // no por cliente), así se ajusta solo cuando se sube una nueva base (2025→2026, luego 2026→2027, etc.)
+  // Usar los dos años más recientes A NIVEL GLOBAL (no según lo que tenga cada cliente) es clave:
+  // así un cliente que compró en 2025 y no en 2026 se compara igual contra 2026 con $0,
+  // en vez de "desaparecer" el 2026 y mostrarse como si 2025 fuera su único año.
   const anosTodos = new Set();
   Object.values(VENTAS_RAW).forEach(rows => rows.forEach(v => anosTodos.add(v[0])));
-  anoActualVentas = [...anosTodos].sort().pop() || '';
+  const anosOrdenados = [...anosTodos].sort();
+  anoActualVentas = anosOrdenados[anosOrdenados.length - 1] || '';
+  anoAnteriorVentas = anosOrdenados[anosOrdenados.length - 2] || '';
 
   ventaTotalByCliente = {};
   Object.keys(VENTAS_RAW).forEach(nombre => {
@@ -642,7 +729,10 @@ const state = {
   fechaHasta: null,
   search: "",
   montoMinimo: 0,
-  actividadFiltro: ""   // "" | "con" | "sin"
+  actividadFiltro: "",   // "" | "con" | "sin"
+  potencialLineas: new Set(), // vacío = todas
+  potencialCategoria: "",      // "" | "Alto" | "Medio" | "Bajo"
+  tiposActividad: new Set()   // vacío = todos ("Visita" | "Capacitación" | "Acción")
 };
 
 /* =========================================================
@@ -702,9 +792,41 @@ document.getElementById('filter-monto').addEventListener('input', e => {
 });
 document.getElementById('filter-actividad').addEventListener('change', e => { state.actividadFiltro = e.target.value; refresh(); });
 
+const TIPOS_ACTIVIDAD = ["Visita", "Capacitación", "Acción"];
+const filterTipoActividadEl = document.getElementById('filter-tipo-actividad');
+TIPOS_ACTIVIDAD.forEach(tipo => {
+  const chip = document.createElement('div');
+  chip.className = 'chip';
+  chip.textContent = tipo;
+  chip.dataset.tipoAct = tipo;
+  chip.addEventListener('click', () => {
+    if(state.tiposActividad.has(tipo)){ state.tiposActividad.delete(tipo); chip.classList.remove('active'); }
+    else { state.tiposActividad.add(tipo); chip.classList.add('active'); }
+    refresh();
+  });
+  filterTipoActividadEl.appendChild(chip);
+});
+
+const filterPotencialLineaEl = document.getElementById('filter-potencial-linea');
+LINEA_ORDER.forEach(code => {
+  const chip = document.createElement('div');
+  chip.className = 'chip';
+  chip.textContent = LINEA_PRODUCTO[code] + ' ('+code+')';
+  chip.dataset.lp = code;
+  chip.addEventListener('click', () => {
+    if(state.potencialLineas.has(code)){ state.potencialLineas.delete(code); chip.classList.remove('active'); }
+    else { state.potencialLineas.add(code); chip.classList.add('active'); }
+    refresh();
+  });
+  filterPotencialLineaEl.appendChild(chip);
+});
+document.getElementById('filter-potencial-categoria').addEventListener('change', e => { state.potencialCategoria = e.target.value; refresh(); });
+
 document.getElementById('btn-clear-filters').addEventListener('click', () => {
   state.canales.clear(); state.lineas.clear(); state.fechaDesde=null; state.fechaHasta=null; state.search="";
   state.montoMinimo = 0; state.actividadFiltro = "";
+  state.potencialLineas.clear(); state.potencialCategoria = "";
+  state.tiposActividad.clear();
   document.querySelectorAll('.chip.active').forEach(c => c.classList.remove('active'));
   document.getElementById('fecha-desde').value = "";
   document.getElementById('fecha-hasta').value = "";
@@ -712,6 +834,7 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   document.getElementById('filter-monto').value = "0";
   document.getElementById('monto-valor').textContent = '$0';
   document.getElementById('filter-actividad').value = "";
+  document.getElementById('filter-potencial-categoria').value = "";
   refresh();
 });
 
@@ -734,6 +857,9 @@ function updateFiltrosBadge(){
   if(state.fechaDesde || state.fechaHasta) n++;
   if(state.montoMinimo > 0) n++;
   if(state.actividadFiltro) n++;
+  n += state.potencialLineas.size;
+  if(state.potencialCategoria) n++;
+  n += state.tiposActividad.size;
   const badge = document.getElementById('filtros-badge');
   if(n > 0){ badge.style.display='flex'; badge.textContent = n; }
   else { badge.style.display='none'; }
@@ -754,12 +880,30 @@ function clienteTieneSeguimientoEnRango(nombre){
   const acts = actividadesByCliente[nombre];
   if(!acts || !acts.length) return false;
   return acts.some(a => {
+    if(esCompletada(a)) return false;
     if(!a.FechaSeguimiento) return false;
     const f = a.FechaSeguimiento.toString().slice(0,10);
     if(state.fechaDesde && f < state.fechaDesde) return false;
     if(state.fechaHasta && f > state.fechaHasta) return false;
     return true;
   });
+}
+
+function clienteTienePotencial(nombre){
+  const pots = potencialByCliente[nombre];
+  if(!pots || !pots.length) return false;
+  return pots.some(p => {
+    const lp = (p.LineaProducto||'').toString();
+    if(state.potencialLineas.size && !state.potencialLineas.has(lp)) return false;
+    if(state.potencialCategoria && p.Categoria !== state.potencialCategoria) return false;
+    return true;
+  });
+}
+
+function clienteTieneTipoActividad(nombre){
+  const acts = actividadesByCliente[nombre];
+  if(!acts || !acts.length) return false;
+  return acts.some(a => state.tiposActividad.has(a.Tipo));
 }
 
 function clientePasaFiltros(c){
@@ -781,6 +925,12 @@ function clientePasaFiltros(c){
     if(state.actividadFiltro === 'con' && !tieneActividad) return false;
     if(state.actividadFiltro === 'sin' && tieneActividad) return false;
   }
+  if(state.tiposActividad.size){
+    if(!clienteTieneTipoActividad(c.nombre)) return false;
+  }
+  if(state.potencialLineas.size || state.potencialCategoria){
+    if(!clienteTienePotencial(c.nombre)) return false;
+  }
   if(state.search && !c.nombre.toLowerCase().includes(state.search)) return false;
   return true;
 }
@@ -791,7 +941,7 @@ function clienteTieneVencido(nombre){
   const acts = actividadesByCliente[nombre];
   if(!acts) return false;
   const t = today();
-  return acts.some(a => a.FechaSeguimiento && a.FechaSeguimiento.toString().slice(0,10) < t);
+  return acts.some(a => !esCompletada(a) && a.FechaSeguimiento && a.FechaSeguimiento.toString().slice(0,10) < t);
 }
 
 /* =========================================================
@@ -876,6 +1026,8 @@ document.getElementById('drawer-close').addEventListener('click', () => drawer.c
    ========================================================= */
 const modalOverlay = document.getElementById('modal-overlay');
 let currentClient = null;
+let editingActivityId = null;
+let editingPotencialId = null;
 
 const lineaSelect = document.getElementById('f-linea-producto');
 LINEA_ORDER.forEach(code => {
@@ -883,6 +1035,18 @@ LINEA_ORDER.forEach(code => {
   opt.value = code; opt.textContent = LINEA_PRODUCTO[code] + ' (' + code + ')';
   lineaSelect.appendChild(opt);
 });
+const potLineaSelect = document.getElementById('p-linea-producto');
+LINEA_ORDER.forEach(code => {
+  const opt = document.createElement('option');
+  opt.value = code; opt.textContent = LINEA_PRODUCTO[code] + ' (' + code + ')';
+  potLineaSelect.appendChild(opt);
+});
+
+function actualizarVisibilidadSeguimiento(){
+  const wrap = document.getElementById('f-fecha-seguimiento-wrap');
+  wrap.style.display = (tipoSeleccionado === 'Acción') ? 'flex' : 'none';
+  if(tipoSeleccionado !== 'Acción'){ document.getElementById('f-fecha-seguimiento').value = ''; }
+}
 
 let tipoSeleccionado = 'Visita';
 document.querySelectorAll('#f-tipo-toggle button').forEach(btn => {
@@ -890,8 +1054,38 @@ document.querySelectorAll('#f-tipo-toggle button').forEach(btn => {
   btn.addEventListener('click', () => {
     tipoSeleccionado = btn.dataset.tipo;
     document.querySelectorAll('#f-tipo-toggle button').forEach(b=>b.classList.toggle('sel', b===btn));
+    actualizarVisibilidadSeguimiento();
   });
 });
+actualizarVisibilidadSeguimiento();
+
+function resetFormularioActividad(){
+  editingActivityId = null;
+  document.getElementById('form-titulo').textContent = 'Registrar nueva actividad';
+  document.getElementById('btn-guardar').textContent = 'Guardar actividad';
+  document.getElementById('btn-cancelar-edicion').style.display = 'none';
+  document.getElementById('f-fecha-registro').value = today();
+  document.getElementById('f-fecha-seguimiento').value = "";
+  document.getElementById('f-descripcion').value = "";
+  document.getElementById('f-linea-producto').value = LINEA_ORDER[0];
+  document.getElementById('save-msg').textContent = "";
+  tipoSeleccionado = 'Visita';
+  document.querySelectorAll('#f-tipo-toggle button').forEach(b=>b.classList.toggle('sel', b.dataset.tipo==='Visita'));
+  actualizarVisibilidadSeguimiento();
+}
+document.getElementById('btn-cancelar-edicion').addEventListener('click', resetFormularioActividad);
+
+function resetFormularioPotencial(){
+  editingPotencialId = null;
+  document.getElementById('form-potencial-titulo').textContent = 'Registrar potencial del cliente';
+  document.getElementById('btn-guardar-potencial').textContent = 'Registrar potencial';
+  document.getElementById('btn-cancelar-edicion-potencial').style.display = 'none';
+  document.getElementById('p-linea-producto').value = LINEA_ORDER[0];
+  document.getElementById('p-categoria').value = 'Alto';
+  document.getElementById('p-comentario').value = '';
+  document.getElementById('save-msg-potencial').textContent = '';
+}
+document.getElementById('btn-cancelar-edicion-potencial').addEventListener('click', resetFormularioPotencial);
 
 function openModal(c){
   currentClient = c;
@@ -899,14 +1093,12 @@ function openModal(c){
   document.getElementById('modal-client-city').textContent = c.ciudad;
   const canalEl = document.getElementById('modal-client-canal');
   canalEl.innerHTML = `<span class="tag ${CANAL_CLASS[c.canal]||''}">${c.canal}</span>`;
-  document.getElementById('f-fecha-registro').value = today();
-  document.getElementById('f-fecha-seguimiento').value = "";
-  document.getElementById('f-descripcion').value = "";
-  document.getElementById('save-msg').textContent = "";
-  tipoSeleccionado = 'Visita';
-  document.querySelectorAll('#f-tipo-toggle button').forEach(b=>b.classList.toggle('sel', b.dataset.tipo==='Visita'));
+
+  resetFormularioActividad();
+  resetFormularioPotencial();
 
   renderHistorial();
+  renderPotencial();
   renderVentas();
   switchTab('seguimiento');
   modalOverlay.classList.add('open');
@@ -937,24 +1129,66 @@ function renderHistorial(){
   list.innerHTML = acts.map(a => {
     const lp = (a.LineaProducto||'').toString();
     const lpNombre = LINEA_PRODUCTO[lp] || lp;
+    const done = esCompletada(a);
     return `
-    <div class="hist-item ${tipoClass(a.Tipo)}">
+    <div class="hist-item ${tipoClass(a.Tipo)} ${done ? 'completada' : ''}" data-id="${a.ID}">
       <div class="hist-top">
         <span class="hist-date">${(a.FechaRegistro||'').toString().slice(0,10)}</span>
         <span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">${a.Tipo||''}</span>
         ${lp ? `<span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">${lpNombre}</span>` : ''}
+        ${done ? `<span class="tag tag-done">✓ Realizado</span>` : ''}
       </div>
       <div class="hist-desc">${(a.Descripcion||'').toString()}</div>
-      ${a.FechaSeguimiento ? `<div class="hist-follow">Próximo seguimiento: <strong class="mono">${a.FechaSeguimiento.toString().slice(0,10)}</strong></div>` : ''}
+      ${(a.FechaSeguimiento && !done) ? `<div class="hist-follow">Próximo seguimiento: <strong class="mono">${a.FechaSeguimiento.toString().slice(0,10)}</strong></div>` : ''}
+      <div class="hist-actions">
+        <button class="edit-btn" data-id="${a.ID}">Editar</button>
+        ${(a.Tipo||'').toString().trim() === 'Acción' ? `<button class="done-btn ${done?'is-done':''}" data-id="${a.ID}" data-done="${done}">${done ? 'Reabrir' : 'Marcar como realizado'}</button>` : ''}
+      </div>
     </div>`;
   }).join('');
+
+  list.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', () => iniciarEdicionActividad(btn.dataset.id)));
+  list.querySelectorAll('.done-btn').forEach(btn => btn.addEventListener('click', () => marcarActividadCompletada(btn.dataset.id, btn.dataset.done !== 'true')));
+}
+
+function iniciarEdicionActividad(id){
+  const a = (actividadesByCliente[currentClient.nombre]||[]).find(x => x.ID === id);
+  if(!a) return;
+  editingActivityId = id;
+  document.getElementById('form-titulo').textContent = 'Editar actividad';
+  document.getElementById('btn-guardar').textContent = 'Guardar cambios';
+  document.getElementById('btn-cancelar-edicion').style.display = 'inline';
+  document.getElementById('f-fecha-registro').value = (a.FechaRegistro||'').toString().slice(0,10);
+  document.getElementById('f-linea-producto').value = (a.LineaProducto||'').toString();
+  document.getElementById('f-descripcion').value = a.Descripcion || '';
+  document.getElementById('f-fecha-seguimiento').value = (a.FechaSeguimiento||'').toString().slice(0,10);
+  tipoSeleccionado = a.Tipo || 'Visita';
+  document.querySelectorAll('#f-tipo-toggle button').forEach(b=>b.classList.toggle('sel', b.dataset.tipo===tipoSeleccionado));
+  actualizarVisibilidadSeguimiento();
+  switchTab('seguimiento');
+  document.getElementById('modal').scrollTop = 0;
+}
+
+async function marcarActividadCompletada(id, completada){
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'marcar_actividad', id, completada }) });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Error desconocido');
+    const a = actividades.find(x => x.ID === id);
+    if(a) a.Completada = completada ? 'TRUE' : 'FALSE';
+    renderHistorial();
+    refresh();
+  }catch(err){
+    console.error(err);
+    alert('No se pudo actualizar el estado de la actividad. Intenta de nuevo.');
+  }
 }
 
 document.getElementById('btn-guardar').addEventListener('click', async () => {
   const fechaRegistro = document.getElementById('f-fecha-registro').value;
   const lineaProducto = lineaSelect.value;
   const descripcion = document.getElementById('f-descripcion').value.trim();
-  const fechaSeguimiento = document.getElementById('f-fecha-seguimiento').value;
+  const fechaSeguimiento = tipoSeleccionado === 'Acción' ? document.getElementById('f-fecha-seguimiento').value : '';
   const msg = document.getElementById('save-msg');
   const btn = document.getElementById('btn-guardar');
 
@@ -970,15 +1204,32 @@ document.getElementById('btn-guardar').addEventListener('click', async () => {
     canalVenta: currentClient.canal
   };
 
-  btn.disabled = true; msg.style.color='var(--ink-faint)'; msg.textContent = 'Guardando...';
+  btn.disabled = true; msg.style.color='var(--ink-faint)'; msg.textContent = editingActivityId ? 'Guardando cambios...' : 'Guardando...';
   try{
-    const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify(payload) });
-    const data = await res.json();
-    if(data.ok){
+    if(editingActivityId){
+      const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'editar_actividad', id: editingActivityId, ...payload }) });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.error || 'Error desconocido');
+      const a = actividades.find(x => x.ID === editingActivityId);
+      if(a){
+        a.FechaRegistro = fechaRegistro; a.LineaProducto = lineaProducto; a.Tipo = tipoSeleccionado;
+        a.Descripcion = descripcion; a.FechaSeguimiento = fechaSeguimiento; a.CanalVenta = currentClient.canal;
+      }
+      rebuildActividadesIndex();
+      renderHistorial();
+      refresh();
+      msg.style.color = 'var(--teal-dark)';
+      msg.textContent = 'Actividad actualizada ✓';
+      resetFormularioActividad();
+    } else {
+      const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'crear_actividad', ...payload }) });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.error || 'Error desconocido');
       actividades.push({
         ID:data.id, Cliente:payload.cliente, FechaRegistro:payload.fechaRegistro,
         LineaProducto:payload.lineaProducto, Tipo:payload.tipo, Descripcion:payload.descripcion,
-        FechaSeguimiento:payload.fechaSeguimiento, CanalVenta:payload.canalVenta, FechaCreacion:data.fechaCreacion
+        FechaSeguimiento:payload.fechaSeguimiento, CanalVenta:payload.canalVenta, FechaCreacion:data.fechaCreacion,
+        Completada:'FALSE'
       });
       rebuildActividadesIndex();
       renderHistorial();
@@ -987,8 +1238,113 @@ document.getElementById('btn-guardar').addEventListener('click', async () => {
       document.getElementById('f-fecha-seguimiento').value = '';
       msg.style.color = 'var(--teal-dark)';
       msg.textContent = 'Actividad guardada ✓';
+    }
+  }catch(err){
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'No se pudo guardar. Intenta de nuevo.';
+    console.error(err);
+  }finally{
+    btn.disabled = false;
+    setTimeout(()=>{ msg.textContent=''; }, 4000);
+  }
+});
+
+/* =========================================================
+   POTENCIAL DE CLIENTE
+   ========================================================= */
+const CATEGORIA_TAG_CLASS = { 'Alto':'tag-pot-alto', 'Medio':'tag-pot-medio', 'Bajo':'tag-pot-bajo' };
+
+function renderPotencial(){
+  const list = document.getElementById('potencial-list');
+  const items = (potencialByCliente[currentClient.nombre]||[]).slice().sort((a,b)=> (b.FechaRegistro||'').localeCompare(a.FechaRegistro||''));
+  if(!items.length){
+    list.innerHTML = '<div class="empty-state">Aún no hay potencial registrado para este cliente.</div>';
+    return;
+  }
+  list.innerHTML = items.map(p => {
+    const lp = (p.LineaProducto||'').toString();
+    return `
+    <div class="hist-item tipo-visita">
+      <div class="hist-top">
+        <span class="hist-date">${(p.FechaRegistro||'').toString().slice(0,10)}</span>
+        <span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">${LINEA_PRODUCTO[lp]||lp}</span>
+        <span class="tag ${CATEGORIA_TAG_CLASS[p.Categoria]||''}">${p.Categoria||''}</span>
+      </div>
+      ${p.Comentario ? `<div class="hist-desc">${p.Comentario}</div>` : ''}
+      <div class="hist-actions">
+        <button class="pot-edit-btn" data-id="${p.ID}">Editar</button>
+        <button class="pot-del-btn" data-id="${p.ID}">Eliminar</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.pot-edit-btn').forEach(btn => btn.addEventListener('click', () => iniciarEdicionPotencial(btn.dataset.id)));
+  list.querySelectorAll('.pot-del-btn').forEach(btn => btn.addEventListener('click', () => eliminarPotencial(btn.dataset.id)));
+}
+
+function iniciarEdicionPotencial(id){
+  const p = (potencialByCliente[currentClient.nombre]||[]).find(x => x.ID === id);
+  if(!p) return;
+  editingPotencialId = id;
+  document.getElementById('form-potencial-titulo').textContent = 'Editar potencial';
+  document.getElementById('btn-guardar-potencial').textContent = 'Guardar cambios';
+  document.getElementById('btn-cancelar-edicion-potencial').style.display = 'inline';
+  document.getElementById('p-linea-producto').value = (p.LineaProducto||'').toString();
+  document.getElementById('p-categoria').value = p.Categoria || 'Alto';
+  document.getElementById('p-comentario').value = p.Comentario || '';
+  switchTab('potencial');
+}
+
+async function eliminarPotencial(id){
+  if(!confirm('¿Eliminar este registro de potencial?')) return;
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'eliminar_potencial', id }) });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Error desconocido');
+    potencial = potencial.filter(x => x.ID !== id);
+    rebuildPotencialIndex();
+    renderPotencial();
+    refresh();
+  }catch(err){
+    console.error(err);
+    alert('No se pudo eliminar. Intenta de nuevo.');
+  }
+}
+
+document.getElementById('btn-guardar-potencial').addEventListener('click', async () => {
+  const lineaProducto = potLineaSelect.value;
+  const categoria = document.getElementById('p-categoria').value;
+  const comentario = document.getElementById('p-comentario').value.trim();
+  const msg = document.getElementById('save-msg-potencial');
+  const btn = document.getElementById('btn-guardar-potencial');
+
+  const payload = { cliente: currentClient.nombre, lineaProducto, categoria, comentario };
+
+  btn.disabled = true; msg.style.color='var(--ink-faint)'; msg.textContent = editingPotencialId ? 'Guardando cambios...' : 'Guardando...';
+  try{
+    if(editingPotencialId){
+      const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'editar_potencial', id: editingPotencialId, ...payload }) });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.error || 'Error desconocido');
+      const p = potencial.find(x => x.ID === editingPotencialId);
+      if(p){ p.LineaProducto = lineaProducto; p.Categoria = categoria; p.Comentario = comentario; }
+      rebuildPotencialIndex();
+      renderPotencial();
+      refresh();
+      msg.style.color = 'var(--teal-dark)';
+      msg.textContent = 'Potencial actualizado ✓';
+      resetFormularioPotencial();
     } else {
-      throw new Error(data.error || 'Error desconocido');
+      const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'crear_potencial', ...payload }) });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.error || 'Error desconocido');
+      potencial.push({ ID:data.id, Cliente:payload.cliente, LineaProducto:lineaProducto, Categoria:categoria, Comentario:comentario, FechaRegistro:data.fechaRegistro });
+      rebuildPotencialIndex();
+      renderPotencial();
+      refresh();
+      document.getElementById('p-comentario').value = '';
+      msg.style.color = 'var(--teal-dark)';
+      msg.textContent = 'Potencial registrado ✓';
     }
   }catch(err){
     msg.style.color = 'var(--red)';
@@ -1036,11 +1392,11 @@ function renderVentas(){
     lineaFiltroEl.appendChild(chip);
   });
 
-  // los dos años más recientes presentes en los datos del cliente (se adapta automáticamente
-  // a lo que se haya subido: Ene-Jul 2025 vs 2026, luego Ene 2026 vs 2027, etc.)
-  const anosPresentes = [...new Set(ventas.map(v=>v[0]))].sort();
-  const anoB = anosPresentes[anosPresentes.length - 1] || '';
-  const anoA = anosPresentes[anosPresentes.length - 2] || '';
+  // los dos años más recientes A NIVEL GLOBAL (no según lo que compró este cliente en particular).
+  // Así, si el cliente no compró en el año más reciente, se ve reflejado como caída a $0 en vez de
+  // "desaparecer" ese año y mostrar el anterior como si fuera nuevo.
+  const anoB = anoActualVentas;
+  const anoA = anoAnteriorVentas;
 
   document.getElementById('th-ano-1').textContent = anoA ? ('Venta ' + anoA) : '—';
   document.getElementById('th-ano-2').textContent = anoB ? ('Venta ' + anoB) : '—';
@@ -1127,6 +1483,8 @@ async function cargarActividades(){
     if(data.ok){
       actividades = data.actividades || [];
       rebuildActividadesIndex();
+      potencial = data.potencial || [];
+      rebuildPotencialIndex();
       // si el Sheet ya tiene datos de venta cargados, esos mandan sobre los datos embebidos iniciales
       if(data.ventas && data.ventas.length){
         VENTAS_RAW = ventasSheetRowsToRaw(data.ventas);
