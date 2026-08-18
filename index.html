@@ -2208,7 +2208,17 @@ btnConfirmarUpload.addEventListener('click', async () => {
       const res1 = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'actualizar_clientes', rows: clientesInfo.rows, adminKey }) });
       const data1 = await res1.json();
       if(!data1.ok) throw new Error(data1.error || 'Error desconocido al guardar clientes.');
-      clientes = clientesRawToObjects(clientesInfo.rows);
+      // El backend conserva automáticamente cualquier cliente que no venga en este Excel
+      // (por ejemplo, los agregados manualmente desde "Agregar cliente"), así que volvemos
+      // a leer la lista completa ya fusionada en vez de quedarnos solo con lo recién subido.
+      const resLeer = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'leer' }), cache:'no-store' });
+      const dataLeer = await resLeer.json();
+      if(dataLeer.ok && dataLeer.clientesData && dataLeer.clientesData.length){
+        const rawClientes = dataLeer.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
+        clientes = clientesRawToObjects(rawClientes);
+      } else {
+        clientes = clientesRawToObjects(clientesInfo.rows);
+      }
       rebuildClienteIndex();
       buildCanalChips();
     }
@@ -2239,8 +2249,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
     if(ventasRows.length) msg += ` — ${ventasRows.length.toLocaleString('es-CL')} registros de venta`;
     if(clientesInfo.sinCoords.length) msg += `. Nota: ${clientesInfo.sinCoords.length} ciudad(es) no reconocidas, esos clientes no aparecerán en el mapa.`;
     uploadStatus.textContent = msg;
-    if(!clientesInfo.sinCoords.length) setTimeout(() => uploadOverlay.classList.remove('open'), 1800);
-  }catch(err){
+    if(!clientesInfo.sinCoords.length) setTimeout(() => uploadOverlay.classList.remove('open'), 1800);  }catch(err){
     console.error(err);
     uploadStatus.className = 'err';
     uploadStatus.textContent = (err.message === 'Clave de administrador incorrecta.' ? '🔒 ' : '') + 'No se pudo actualizar: ' + err.message;
