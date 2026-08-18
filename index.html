@@ -221,6 +221,19 @@
   #map-wrap{ flex:1; position:relative; }
   #map{ height:100%; width:100%; background:#E7EDEC; }
 
+  #map-loading{
+    position:absolute; inset:0; z-index:900; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:12px; background:rgba(244,246,245,.88); backdrop-filter:blur(1px);
+    transition:opacity .25s ease;
+  }
+  #map-loading.hidden{ opacity:0; pointer-events:none; }
+  .map-loading-spinner{
+    width:32px; height:32px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--teal);
+    animation:map-spin .8s linear infinite;
+  }
+  .map-loading-text{ font-size:13px; font-weight:600; color:var(--ink-soft); }
+  @keyframes map-spin{ to{ transform:rotate(360deg); } }
+
   .city-marker{
     display:flex; align-items:center; justify-content:center;
     border-radius:50%; color:#fff; font-family:'IBM Plex Mono',monospace; font-weight:600;
@@ -551,6 +564,10 @@
 
   <div id="map-wrap">
     <div id="map"></div>
+    <div id="map-loading">
+      <div class="map-loading-spinner"></div>
+      <div class="map-loading-text">Cargando clientes...</div>
+    </div>
     <div class="legend">
       <div class="lg-title">Canal predominante</div>
       <div id="legend-canales"></div>
@@ -2019,6 +2036,7 @@ async function cargarActividades(){
   try{ recomputeVentaTotals(); }catch(e){ console.error('Error recalculando totales de venta', e); try{ buildDatalistsVentas(); }catch(e2){} }
   try{ refresh(); }catch(e){ console.error('Error al dibujar el mapa', e); }
   refrescarTamanoMapa();
+  document.getElementById('map-loading').classList.add('hidden');
 }
 
 cargarActividades();
