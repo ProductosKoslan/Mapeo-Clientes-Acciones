@@ -97,17 +97,17 @@
   #monto-valor{ color:var(--teal-dark); font-weight:600; }
 
   /* ---------- MODAL UPLOAD VENTAS ---------- */
-  #upload-overlay{
+  #upload-overlay, #nuevo-cliente-overlay{
     position:fixed; inset:0; background:rgba(16,26,32,.45); z-index:2100;
     display:none; align-items:center; justify-content:center; padding:24px;
   }
-  #upload-overlay.open{ display:flex; }
-  #upload-modal{
+  #upload-overlay.open, #nuevo-cliente-overlay.open{ display:flex; }
+  #upload-modal, .simple-modal{
     background:var(--surface); width:min(520px, 100%); border-radius:14px; box-shadow:var(--shadow-lg);
     padding:24px; position:relative;
   }
-  #upload-modal h3{ margin:0 0 4px; font-size:17px; }
-  #upload-modal .up-sub{ font-size:12.5px; color:var(--ink-faint); margin-bottom:16px; line-height:1.5; }
+  #upload-modal h3, .simple-modal h3{ margin:0 0 4px; font-size:17px; }
+  #upload-modal .up-sub, .simple-modal .up-sub{ font-size:12.5px; color:var(--ink-faint); margin-bottom:16px; line-height:1.5; }
   .upload-close{ position:absolute; top:16px; right:16px; border:none; background:var(--surface-2); width:28px; height:28px; border-radius:50%; cursor:pointer; color:var(--ink-soft); font-size:15px; }
   .upload-close:hover{ background:var(--red-soft); color:var(--red); }
   .drop-zone{
@@ -445,6 +445,10 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
       Actividades por línea
     </button>
+    <button class="btn-upload" id="btn-abrir-nuevo-cliente" title="Agregar un cliente nuevo">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Agregar cliente
+    </button>
 
     <div class="filters">
       <div class="search-box">
@@ -635,6 +639,40 @@
         </tr></thead>
         <tbody id="actlinea-tbody"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div id="nuevo-cliente-overlay">
+  <div class="simple-modal">
+    <button class="upload-close" id="nuevo-cliente-close">✕</button>
+    <h3>Agregar cliente nuevo</h3>
+    <div class="up-sub">
+      Se agrega como un cliente sin ventas, solo para poder registrarle visitas, capacitaciones y acciones desde el mapa.
+    </div>
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="field full">
+        <label>Nombre del cliente</label>
+        <input type="text" id="nc-nombre" placeholder="Ej: FERRETERÍA EL CLAVO">
+      </div>
+      <div class="field full">
+        <label>Ciudad</label>
+        <input type="text" id="nc-ciudad" list="datalist-ciudades" placeholder="Ej: Villarrica" autocomplete="off">
+        <datalist id="datalist-ciudades"></datalist>
+        <span style="font-size:10.5px;color:var(--ink-faint);">Debe ser una ciudad/comuna de Chile reconocida por el mapa</span>
+      </div>
+      <div class="field">
+        <label>Canal de venta</label>
+        <select id="nc-division"></select>
+      </div>
+      <div class="field">
+        <label>Vendedor (opcional)</label>
+        <input type="text" id="nc-vendedor" placeholder="Nombre del vendedor">
+      </div>
+    </div>
+    <div id="nuevo-cliente-status"></div>
+    <div class="upload-actions">
+      <button class="btn-primary" id="btn-confirmar-nuevo-cliente">Agregar cliente</button>
     </div>
   </div>
 </div>
@@ -2370,6 +2408,90 @@ function renderActlinea(){
     });
   });
 }
+
+/* =========================================================
+   MENÚ: AGREGAR CLIENTE NUEVO (sin ventas, solo para actividades)
+   Disponible para todo el equipo, sin clave de administrador —
+   solo agrega una fila nueva, no toca ni reemplaza el resto de la base.
+   ========================================================= */
+const nuevoClienteOverlay = document.getElementById('nuevo-cliente-overlay');
+const ncDivisionSelect = document.getElementById('nc-division');
+
+function titleCase(s){
+  return s.toLowerCase().replace(/(^|\s|-)([a-záéíóúñ])/g, (m,p1,p2) => p1 + p2.toUpperCase());
+}
+
+function poblarDatalistCiudades(){
+  const dl = document.getElementById('datalist-ciudades');
+  dl.innerHTML = Object.keys(COORDS_CIUDAD).sort().map(k => `<option value="${titleCase(k)}">`).join('');
+}
+
+function poblarSelectDivisionNuevoCliente(){
+  const divisiones = [...new Set(clientes.map(c => c.divisionRaw).filter(Boolean))].sort();
+  ncDivisionSelect.innerHTML = divisiones.map(d => `<option value="${d.replace(/"/g,'&quot;')}">${CANAL_MAP[d] || d}</option>`).join('');
+}
+
+document.getElementById('btn-abrir-nuevo-cliente').addEventListener('click', () => {
+  document.getElementById('nc-nombre').value = '';
+  document.getElementById('nc-ciudad').value = '';
+  document.getElementById('nc-vendedor').value = '';
+  document.getElementById('nuevo-cliente-status').textContent = '';
+  document.getElementById('nuevo-cliente-status').className = '';
+  poblarDatalistCiudades();
+  poblarSelectDivisionNuevoCliente();
+  nuevoClienteOverlay.classList.add('open');
+});
+document.getElementById('nuevo-cliente-close').addEventListener('click', () => nuevoClienteOverlay.classList.remove('open'));
+nuevoClienteOverlay.addEventListener('click', e => { if(e.target === nuevoClienteOverlay) nuevoClienteOverlay.classList.remove('open'); });
+
+document.getElementById('btn-confirmar-nuevo-cliente').addEventListener('click', async () => {
+  const nombre = document.getElementById('nc-nombre').value.trim();
+  const ciudad = document.getElementById('nc-ciudad').value.trim();
+  const division = ncDivisionSelect.value;
+  const vendedor = document.getElementById('nc-vendedor').value.trim();
+  const status = document.getElementById('nuevo-cliente-status');
+  const btn = document.getElementById('btn-confirmar-nuevo-cliente');
+
+  if(!nombre || !ciudad){
+    status.className = 'err';
+    status.textContent = 'Completa al menos el nombre y la ciudad.';
+    return;
+  }
+  const coords = COORDS_CIUDAD[normCiudad(ciudad)];
+  if(!coords){
+    status.className = 'err';
+    status.textContent = 'No reconozco esa ciudad. Elige una de la lista de sugerencias al escribir.';
+    return;
+  }
+
+  btn.disabled = true; status.className = 'busy'; status.textContent = 'Guardando...';
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({
+      accion:'agregar_cliente', nombre, ciudad, division, vendedor, lat: coords[0], lon: coords[1]
+    }) });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'Error desconocido');
+
+    const nuevo = clientesRawToObjects([[nombre, ciudad, division, coords[0], coords[1], vendedor]])[0];
+    clientes.push(nuevo);
+    rebuildClienteIndex();
+    buildCanalChips();
+    refresh();
+
+    status.className = 'ok';
+    status.textContent = 'Cliente agregado ✓';
+    setTimeout(() => {
+      nuevoClienteOverlay.classList.remove('open');
+      openModal(nuevo);
+    }, 700);
+  }catch(err){
+    console.error(err);
+    status.className = 'err';
+    status.textContent = 'No se pudo agregar: ' + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
 </script>
 </body>
 </html>
