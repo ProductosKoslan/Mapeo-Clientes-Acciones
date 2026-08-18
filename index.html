@@ -313,6 +313,18 @@
   #actlinea-table tbody tr{ cursor:pointer; }
   #actlinea-table tbody tr:hover{ background:var(--surface-2); }
   #actlinea-table td.fecha-vencida{ color:var(--red); font-weight:600; }
+  #actlinea-chip-vencidas.active{ background:var(--red); border-color:var(--red); color:#fff; }
+  .al-actions{ display:flex; gap:8px; }
+  .al-actions button{
+    border:none; background:none; cursor:pointer; font-size:11px; font-weight:600; padding:0;
+    color:var(--ink-faint); text-decoration:underline; white-space:nowrap;
+  }
+  .al-actions button:hover{ color:var(--teal-dark); }
+  .al-actions button.al-done-btn.is-done{ color:var(--amber); }
+  .tag-estado-vencida{ background:var(--red-soft); color:var(--red); }
+  .tag-estado-completada{ background:var(--teal-soft); color:var(--teal-dark); }
+  .tag-estado-pendiente{ background:var(--amber-soft); color:var(--amber); }
+  .tag-estado-registro{ background:var(--surface-2); color:var(--ink-soft); }
   .tab-btn{
     border:none; background:none; padding:10px 4px; margin-right:22px; font-size:13.5px; font-weight:600;
     color:var(--ink-faint); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;
@@ -595,6 +607,12 @@
         <label>Tipo de actividad</label>
         <div class="chip-select" id="actlinea-filter-tipo"></div>
       </div>
+      <div class="filter-group">
+        <label>Estado (seguimiento)</label>
+        <div class="chip-select">
+          <div class="chip" id="actlinea-chip-vencidas" data-vencidas="1">Solo vencidas</div>
+        </div>
+      </div>
     </div>
 
     <div id="actlinea-summary" class="actlinea-summary"></div>
@@ -609,7 +627,9 @@
           <th style="cursor:pointer;" data-sort="Ciudad">Ciudad <span class="sort-arrow"></span></th>
           <th style="cursor:pointer;" data-sort="FechaRegistro">Fecha registro <span class="sort-arrow"></span></th>
           <th style="cursor:pointer;" data-sort="FechaSeguimiento">Fecha seguimiento <span class="sort-arrow"></span></th>
+          <th>Estado</th>
           <th>Descripción</th>
+          <th>Acciones</th>
         </tr></thead>
         <tbody id="actlinea-tbody"></tbody>
       </table>
@@ -1001,8 +1021,8 @@ TIPOS_ACTIVIDAD.forEach(tipo => {
 
 document.getElementById('filter-tendencia').addEventListener('change', e => { state.tendencia = e.target.value; refresh(); });
 
-document.getElementById('filter-proveedor').addEventListener('input', e => { state.proveedorFiltro = e.target.value.trim(); refresh(); });
-document.getElementById('filter-tipo-articulo').addEventListener('input', e => { state.tipoArticuloFiltro = e.target.value.trim(); refresh(); });
+document.getElementById('filter-proveedor').addEventListener('input', e => { state.proveedorFiltro = e.target.value.trim(); refresh(); if(currentClient) renderVentas(); });
+document.getElementById('filter-tipo-articulo').addEventListener('input', e => { state.tipoArticuloFiltro = e.target.value.trim(); refresh(); if(currentClient) renderVentas(); });
 
 function buildDatalistsVentas(){
   const proveedores = new Set();
@@ -1492,7 +1512,7 @@ async function marcarActividadCompletada(id, completada){
     if(!data.ok) throw new Error(data.error || 'Error desconocido');
     const a = actividades.find(x => x.ID === id);
     if(a) a.Completada = completada ? 'TRUE' : 'FALSE';
-    renderHistorial();
+    if(currentClient) renderHistorial();
     refresh();
   }catch(err){
     console.error(err);
@@ -1754,11 +1774,6 @@ function renderVentas(){
   document.getElementById('th-ano-1').textContent = anoA ? ('Venta ' + etiquetaAno(anoA)) : '—';
   document.getElementById('th-ano-2').textContent = anoB ? ('Venta ' + etiquetaAno(anoB)) : '—';
 
-  const totalA = ventas.filter(v=>v[0]===anoA).reduce((s,v)=>s+v[5],0);
-  const totalB = ventas.filter(v=>v[0]===anoB).reduce((s,v)=>s+v[5],0);
-  const totalNeta = ventas.reduce((s,v)=>s+v[5],0);
-  const crecTotal = totalA > 0 ? ((totalB-totalA)/totalA*100) : (totalB>0 ? null : 0);
-
   function crecHtml(pct, base, comp){
     if(pct === null) return `<span class="tag" style="background:var(--teal-soft);color:var(--teal-dark)">Nuevo en ${etiquetaAno(anoB)}</span>`;
     if(base===0 && comp===0) return '<span class="growth-flat">—</span>';
@@ -1767,21 +1782,38 @@ function renderVentas(){
     return `<span class="${cls}">${sign}${pct.toFixed(1)}%</span>`;
   }
 
-  summary.innerHTML = `
-    <div class="venta-kpi"><div class="v-num">$${Math.round(totalNeta).toLocaleString('es-CL')}</div><div class="v-lbl">Venta neta total</div></div>
-    <div class="venta-kpi"><div class="v-num">$${Math.round(totalA).toLocaleString('es-CL')}</div><div class="v-lbl">Venta ${etiquetaAno(anoA)}</div></div>
-    <div class="venta-kpi"><div class="v-num">$${Math.round(totalB).toLocaleString('es-CL')}</div><div class="v-lbl">Venta ${etiquetaAno(anoB)}</div></div>
-    <div class="venta-kpi"><div class="v-num">${crecHtml(crecTotal, totalA, totalB)}</div><div class="v-lbl">Crecimiento ${anoA||'—'}→${anoB||'—'}</div></div>
-  `;
+  // ventas que pasan los filtros actuales (línea seleccionada + proveedor/tipo artículo del panel de filtros)
+  function ventasFiltradas(){
+    return ventas.filter(v => {
+      const [ano, linProd, tipoArt, proveedor] = v;
+      if(ventaLineasSeleccionadas.size && !ventaLineasSeleccionadas.has(linProd)) return false;
+      if(state.proveedorFiltro && !proveedor.toLowerCase().includes(state.proveedorFiltro.toLowerCase())) return false;
+      if(state.tipoArticuloFiltro && !tipoArt.toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase())) return false;
+      return true;
+    });
+  }
+
+  function renderSummary(){
+    const vf = ventasFiltradas();
+    const totalA = vf.filter(v=>v[0]===anoA).reduce((s,v)=>s+v[5],0);
+    const totalB = vf.filter(v=>v[0]===anoB).reduce((s,v)=>s+v[5],0);
+    const totalNeta = vf.reduce((s,v)=>s+v[5],0);
+    const crecTotal = totalA > 0 ? ((totalB-totalA)/totalA*100) : (totalB>0 ? null : 0);
+    const filtroActivo = ventaLineasSeleccionadas.size || state.proveedorFiltro || state.tipoArticuloFiltro;
+    summary.innerHTML = `
+      <div class="venta-kpi"><div class="v-num">$${Math.round(totalNeta).toLocaleString('es-CL')}</div><div class="v-lbl">Venta neta ${filtroActivo?'(filtrada)':'total'}</div></div>
+      <div class="venta-kpi"><div class="v-num">$${Math.round(totalA).toLocaleString('es-CL')}</div><div class="v-lbl">Venta ${etiquetaAno(anoA)}</div></div>
+      <div class="venta-kpi"><div class="v-num">$${Math.round(totalB).toLocaleString('es-CL')}</div><div class="v-lbl">Venta ${etiquetaAno(anoB)}</div></div>
+      <div class="venta-kpi"><div class="v-num">${crecHtml(crecTotal, totalA, totalB)}</div><div class="v-lbl">Crecimiento ${anoA||'—'}→${anoB||'—'}</div></div>
+    `;
+  }
 
   function draw(){
+    renderSummary();
     // agrupar por línea + tipo de artículo + proveedor, separando venta por año (A = anterior, B = más reciente)
     const grupos = {};
-    ventas.forEach(v => {
+    ventasFiltradas().forEach(v => {
       const [ano, linProd, tipoArt, proveedor, q, ventaNeta] = v;
-      if(ventaLineasSeleccionadas.size && !ventaLineasSeleccionadas.has(linProd)) return;
-      if(state.proveedorFiltro && !proveedor.toLowerCase().includes(state.proveedorFiltro.toLowerCase())) return;
-      if(state.tipoArticuloFiltro && !tipoArt.toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase())) return;
       const key = linProd+'|'+tipoArt+'|'+proveedor;
       if(!grupos[key]) grupos[key] = { linProd, tipoArt, proveedor, vA:0, vB:0 };
       if(ano === anoA) grupos[key].vA += ventaNeta;
@@ -2068,7 +2100,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
    MENÚ: ACTIVIDADES POR LÍNEA DE PRODUCTO
    ========================================================= */
 const actlineaOverlay = document.getElementById('actlinea-overlay');
-const actlineaState = { lineas: new Set(), tipos: new Set() }; // vacío = todas
+const actlineaState = { lineas: new Set(), tipos: new Set(), soloVencidas: false };
 let actlineaSortState = { campo: 'FechaSeguimiento', dir: 'desc' };
 document.querySelectorAll('#actlinea-table th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
@@ -2114,6 +2146,12 @@ document.getElementById('btn-abrir-actlinea').addEventListener('click', () => {
 document.getElementById('actlinea-close').addEventListener('click', () => actlineaOverlay.classList.remove('open'));
 actlineaOverlay.addEventListener('click', e => { if(e.target === actlineaOverlay) actlineaOverlay.classList.remove('open'); });
 
+document.getElementById('actlinea-chip-vencidas').addEventListener('click', function(){
+  actlineaState.soloVencidas = !actlineaState.soloVencidas;
+  this.classList.toggle('active', actlineaState.soloVencidas);
+  renderActlinea();
+});
+
 function renderActlinea(){
   // resumen: conteo por línea x tipo, sobre TODAS las actividades (no depende de los filtros del mapa)
   const summaryEl = document.getElementById('actlinea-summary');
@@ -2156,11 +2194,18 @@ function renderActlinea(){
 
   // tabla detallada, filtrada por chips seleccionados y ordenable por columna
   const tbody = document.getElementById('actlinea-tbody');
+  const t = today();
+  function esVencida(a){
+    const esAccion = (a.Tipo||'').toString().trim() === 'Acción';
+    const fechaSeg = (a.FechaSeguimiento||'').toString().slice(0,10);
+    return esAccion && fechaSeg && !esCompletada(a) && fechaSeg < t;
+  }
   const filtradas = actividades.filter(a => {
     const lp = (a.LineaProducto||'').toString();
     const tipo = (a.Tipo||'').toString().trim();
     if(actlineaState.lineas.size && !actlineaState.lineas.has(lp)) return false;
     if(actlineaState.tipos.size && !actlineaState.tipos.has(tipo)) return false;
+    if(actlineaState.soloVencidas && !esVencida(a)) return false;
     return true;
   });
 
@@ -2180,35 +2225,70 @@ function renderActlinea(){
   });
 
   if(!filtradas.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:16px;">No hay actividades registradas con estos filtros.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--ink-faint);padding:16px;">No hay actividades registradas con estos filtros.</td></tr>';
     return;
   }
 
-  const t = today();
   tbody.innerHTML = filtradas.map(a => {
     const lp = (a.LineaProducto||'').toString();
     const c = clienteByNombre[a.Cliente];
     const esAccion = (a.Tipo||'').toString().trim() === 'Acción';
     const fechaSeg = (a.FechaSeguimiento||'').toString().slice(0,10);
-    const vencida = esAccion && fechaSeg && !esCompletada(a) && fechaSeg < t;
+    const done = esCompletada(a);
+    const vencida = esVencida(a);
+    let estadoTag = '';
+    if(esAccion){
+      if(vencida) estadoTag = '<span class="tag tag-estado-vencida">Vencida</span>';
+      else if(done) estadoTag = '<span class="tag tag-estado-completada">Completada</span>';
+      else if(fechaSeg) estadoTag = '<span class="tag tag-estado-pendiente">Pendiente</span>';
+      else estadoTag = '<span class="tag tag-estado-registro">Sin fecha</span>';
+    } else {
+      estadoTag = '<span class="tag tag-estado-registro">Registro</span>';
+    }
     return `
-    <tr data-cliente="${(a.Cliente||'').replace(/"/g,'&quot;')}">
-      <td style="font-weight:600;">${a.Cliente||''}</td>
+    <tr data-id="${a.ID}" data-cliente="${(a.Cliente||'').replace(/"/g,'&quot;')}">
+      <td class="al-cliente-cell" style="font-weight:600;cursor:pointer;">${a.Cliente||''}</td>
       <td>${a.Tipo||''}</td>
       <td><span class="lp-dot" style="background:${(getComputedStyle(document.documentElement).getPropertyValue('--lp-'+lp)||'#999').trim()}"></span>${LINEA_PRODUCTO[lp]||lp}</td>
       <td>${c ? c.ciudad : ''}</td>
       <td class="mono">${(a.FechaRegistro||'').toString().slice(0,10)}</td>
-      <td class="mono ${vencida?'fecha-vencida':''}">${esAccion ? (fechaSeg || '—') : '—'}${esAccion && esCompletada(a) ? ' ✓' : ''}</td>
-      <td style="max-width:280px;">${a.Descripcion||''}</td>
+      <td class="mono ${vencida?'fecha-vencida':''}">${esAccion ? (fechaSeg || '—') : '—'}</td>
+      <td>${estadoTag}</td>
+      <td style="max-width:260px;">${a.Descripcion||''}</td>
+      <td>
+        <div class="al-actions">
+          <button class="al-edit-btn" data-id="${a.ID}" data-cliente="${(a.Cliente||'').replace(/"/g,'&quot;')}">Editar</button>
+          ${esAccion ? `<button class="al-done-btn ${done?'is-done':''}" data-id="${a.ID}" data-done="${done}">${done ? 'Reabrir' : 'Completar'}</button>` : ''}
+        </div>
+      </td>
     </tr>`;
   }).join('');
 
-  tbody.querySelectorAll('tr[data-cliente]').forEach(row => {
-    row.addEventListener('click', () => {
-      const c = clienteByNombre[row.dataset.cliente];
+  tbody.querySelectorAll('.al-cliente-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const c = clienteByNombre[cell.closest('tr').dataset.cliente];
       if(!c) return;
       actlineaOverlay.classList.remove('open');
       openModal(c);
+    });
+  });
+
+  tbody.querySelectorAll('.al-edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const c = clienteByNombre[btn.dataset.cliente];
+      if(!c) return;
+      actlineaOverlay.classList.remove('open');
+      openModal(c);
+      iniciarEdicionActividad(btn.dataset.id);
+    });
+  });
+
+  tbody.querySelectorAll('.al-done-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await marcarActividadCompletada(btn.dataset.id, btn.dataset.done !== 'true');
+      renderActlinea();
     });
   });
 }
