@@ -823,17 +823,47 @@ function clientesRawToObjects(raw){
     nombre: c[0], ciudad: c[1], divisionRaw: c[2],
     canal: CANAL_MAP[c[2]] || (c[2] || "Sin canal"),
     lat: c[3], lon: c[4],
-    vendedor: c[5] || ''
+    vendedor: c[5] || '',
+    // id único por SUCURSAL (mismo cliente puede tener varias ciudades). Las actividades y
+    // el potencial nuevos se guardan con este id, así quedan separados por sucursal. Las
+    // ventas siguen a nivel de "nombre" nada más, porque así vienen en el Excel de origen
+    // (no hay desglose de venta por sucursal).
+    id: c[0] + ' — ' + c[1]
   }));
 }
 
 let clientes = clientesRawToObjects(CLIENTES_RAW);
-let clienteByNombre = {};
+let clienteByNombre = {};       // clave: id de sucursal O nombre plano (compatibilidad con registros antiguos)
+let clienteBranchCount = {};    // cuántas sucursales tiene cada nombre de cliente
 function rebuildClienteIndex(){
   clienteByNombre = {};
-  clientes.forEach(c => clienteByNombre[c.nombre] = c);
+  clienteBranchCount = {};
+  clientes.forEach(c => { clienteBranchCount[c.nombre] = (clienteBranchCount[c.nombre]||0) + 1; });
+  clientes.forEach(c => {
+    clienteByNombre[c.id] = c;
+    if(!clienteByNombre[c.nombre]) clienteByNombre[c.nombre] = c; // fallback para actividades antiguas sin sucursal
+  });
 }
 rebuildClienteIndex();
+
+// Actividades/potencial de una sucursal específica: siempre incluye lo guardado con su id de
+// sucursal; si el cliente tiene UNA sola sucursal, además incluye lo guardado con el nombre
+// plano (registros de antes de este cambio). Si tiene varias sucursales, esos registros
+// antiguos ambiguos no se pueden asignar con certeza a una sola, así que no se muestran aquí.
+function actividadesDeCliente(c){
+  const porId = actividadesByCliente[c.id] || [];
+  if(clienteBranchCount[c.nombre] === 1){
+    return porId.concat(actividadesByCliente[c.nombre] || []);
+  }
+  return porId;
+}
+function potencialDeCliente(c){
+  const porId = potencialByCliente[c.id] || [];
+  if(clienteBranchCount[c.nombre] === 1){
+    return porId.concat(potencialByCliente[c.nombre] || []);
+  }
+  return porId;
+}
 
 let actividades = []; // desde Google Sheet
 let actividadesByCliente = {};
@@ -1143,7 +1173,7 @@ function renderPendientesPopover(){
     return;
   }
   list.innerHTML = pendientesActuales.map(({cliente, actividad}) => `
-    <div class="pend-item" data-cliente="${cliente.nombre.replace(/"/g,'&quot;')}">
+    <div class="pend-item" data-cliente-id="${cliente.id.replace(/"/g,'&quot;')}">
       <div class="pend-cliente">${cliente.nombre}</div>
       <div class="pend-meta">
         <span class="pend-fecha">${(actividad.FechaSeguimiento||'').toString().slice(0,10)}</span>
@@ -1154,7 +1184,7 @@ function renderPendientesPopover(){
   `).join('');
   list.querySelectorAll('.pend-item').forEach(el => {
     el.addEventListener('click', () => {
-      const c = clienteByNombre[el.dataset.cliente];
+      const c = clienteByNombre[el.dataset.clienteId];
       if(!c) return;
       pendientesPopover.classList.remove('open');
       drawer.classList.remove('open');
@@ -1182,16 +1212,16 @@ function updateFiltrosBadge(){
 /* =========================================================
    FILTER LOGIC
    ========================================================= */
-function clienteTieneLinea(nombre, code){
-  const ventas = VENTAS_RAW[nombre];
+function clienteTieneLinea(c, code){
+  const ventas = VENTAS_RAW[c.nombre];
   if(ventas && ventas.some(v => v[1] === code)) return true;
-  const acts = actividadesByCliente[nombre];
+  const acts = actividadesDeCliente(c);
   if(acts && acts.some(a => (a.LineaProducto||'').toString() === code)) return true;
   return false;
 }
 
-function clienteTieneSeguimientoEnRango(nombre){
-  const acts = actividadesByCliente[nombre];
+function clienteTieneSeguimientoEnRango(c){
+  const acts = actividadesDeCliente(c);
   if(!acts || !acts.length) return false;
   return acts.some(a => {
     if((a.Tipo||'').toString().trim() !== 'Acción') return false; // solo Acción tiene seguimiento pendiente
@@ -1204,8 +1234,8 @@ function clienteTieneSeguimientoEnRango(nombre){
   });
 }
 
-function clienteTienePotencial(nombre){
-  const pots = potencialByCliente[nombre];
+function clienteTienePotencial(c){
+  const pots = potencialDeCliente(c);
   if(!pots || !pots.length) return false;
   return pots.some(p => {
     const lp = (p.LineaProducto||'').toString();
@@ -1215,8 +1245,8 @@ function clienteTienePotencial(nombre){
   });
 }
 
-function clienteTieneTipoActividad(nombre){
-  const acts = actividadesByCliente[nombre];
+function clienteTieneTipoActividad(c){
+  const acts = actividadesDeCliente(c);
   if(!acts || !acts.length) return false;
   return acts.some(a => state.tiposActividad.has(a.Tipo));
 }
@@ -1235,28 +1265,28 @@ function clientePasaFiltros(c){
   if(state.canales.size && !state.canales.has(c.canal)) return false;
   if(state.lineas.size){
     let ok = false;
-    for(const code of state.lineas){ if(clienteTieneLinea(c.nombre, code)){ ok = true; break; } }
+    for(const code of state.lineas){ if(clienteTieneLinea(c, code)){ ok = true; break; } }
     if(!ok) return false;
   }
   if(state.fechaDesde || state.fechaHasta){
-    if(!clienteTieneSeguimientoEnRango(c.nombre)) return false;
+    if(!clienteTieneSeguimientoEnRango(c)) return false;
   }
   if(state.montoMinimo > 0){
     if((ventaTotalByCliente[c.nombre] || 0) < state.montoMinimo) return false;
   }
   if(state.actividadFiltro){
-    const tieneActividad = !!(actividadesByCliente[c.nombre] && actividadesByCliente[c.nombre].length);
+    const tieneActividad = actividadesDeCliente(c).length > 0;
     if(state.actividadFiltro === 'con' && !tieneActividad) return false;
     if(state.actividadFiltro === 'sin' && tieneActividad) return false;
   }
   if(state.tiposActividad.size){
-    if(!clienteTieneTipoActividad(c.nombre)) return false;
+    if(!clienteTieneTipoActividad(c)) return false;
   }
   if(state.tendencia){
     if(clienteTendencia(c.nombre) !== state.tendencia) return false;
   }
   if(state.potencialLineas.size || state.potencialCategoria){
-    if(!clienteTienePotencial(c.nombre)) return false;
+    if(!clienteTienePotencial(c)) return false;
   }
   if(state.proveedorFiltro){
     const ventas = VENTAS_RAW[c.nombre];
@@ -1272,8 +1302,8 @@ function clientePasaFiltros(c){
 
 function today(){ return new Date().toISOString().slice(0,10); }
 
-function clienteTieneVencido(nombre){
-  const acts = actividadesByCliente[nombre];
+function clienteTieneVencido(c){
+  const acts = actividadesDeCliente(c);
   if(!acts) return false;
   const t = today();
   return acts.some(a => (a.Tipo||'').toString().trim() === 'Acción' && !esCompletada(a) && a.FechaSeguimiento && a.FechaSeguimiento.toString().slice(0,10) < t);
@@ -1301,12 +1331,12 @@ function refresh(){
   Object.values(porCiudad).forEach(grupo => {
    try{
     const n = grupo.clientes.length;
-    const vencido = grupo.clientes.some(c => clienteTieneVencido(c.nombre));
+    const vencido = grupo.clientes.some(c => clienteTieneVencido(c));
     if(vencido){
       grupo.clientes.forEach(c => {
-        if(!clienteTieneVencido(c.nombre)) return;
+        if(!clienteTieneVencido(c)) return;
         totalPendientes++;
-        const acts = actividadesByCliente[c.nombre] || [];
+        const acts = actividadesDeCliente(c);
         const t = today();
         acts.filter(a => (a.Tipo||'').toString().trim() === 'Acción' && !esCompletada(a) && a.FechaSeguimiento && a.FechaSeguimiento.toString().slice(0,10) < t)
           .forEach(a => pendientesActuales.push({ cliente: c, actividad: a }));
@@ -1359,8 +1389,8 @@ function openDrawer(grupo){
     .forEach(c => {
       const row = document.createElement('div');
       row.className = 'client-row';
-      const vencido = clienteTieneVencido(c.nombre);
-      const nAct = (actividadesByCliente[c.nombre]||[]).length;
+      const vencido = clienteTieneVencido(c);
+      const nAct = actividadesDeCliente(c).length;
       row.innerHTML = `
         <div class="cn">${c.nombre}</div>
         <div class="meta">
@@ -1479,7 +1509,7 @@ function tipoClass(t){
 
 function renderHistorial(){
   const list = document.getElementById('hist-list');
-  const acts = (actividadesByCliente[currentClient.nombre]||[]).slice().sort((a,b)=> (b.FechaRegistro||'').localeCompare(a.FechaRegistro||''));
+  const acts = actividadesDeCliente(currentClient).slice().sort((a,b)=> (b.FechaRegistro||'').localeCompare(a.FechaRegistro||''));
   if(!acts.length){
     list.innerHTML = '<div class="empty-state">Aún no hay actividades registradas para este cliente.</div>';
     return;
@@ -1512,7 +1542,7 @@ function renderHistorial(){
 }
 
 function iniciarEdicionActividad(id){
-  const a = (actividadesByCliente[currentClient.nombre]||[]).find(x => x.ID === id);
+  const a = actividadesDeCliente(currentClient).find(x => x.ID === id);
   if(!a) return;
   editingActivityId = id;
   document.getElementById('form-titulo').textContent = 'Editar actividad';
@@ -1576,7 +1606,7 @@ document.getElementById('btn-guardar').addEventListener('click', async () => {
   }
 
   const payload = {
-    cliente: currentClient.nombre,
+    cliente: currentClient.id,
     fechaRegistro, lineaProducto, tipo: tipoSeleccionado, descripcion, fechaSeguimiento,
     canalVenta: currentClient.canal
   };
@@ -1633,7 +1663,7 @@ const CATEGORIA_TAG_CLASS = { 'Alto':'tag-pot-alto', 'Medio':'tag-pot-medio', 'B
 
 function renderPotencial(){
   const list = document.getElementById('potencial-list');
-  const items = (potencialByCliente[currentClient.nombre]||[]).slice().sort((a,b)=> (b.FechaRegistro||'').localeCompare(a.FechaRegistro||''));
+  const items = potencialDeCliente(currentClient).slice().sort((a,b)=> (b.FechaRegistro||'').localeCompare(a.FechaRegistro||''));
   if(!items.length){
     list.innerHTML = '<div class="empty-state">Aún no hay potencial registrado para este cliente.</div>';
     return;
@@ -1660,7 +1690,7 @@ function renderPotencial(){
 }
 
 function iniciarEdicionPotencial(id){
-  const p = (potencialByCliente[currentClient.nombre]||[]).find(x => x.ID === id);
+  const p = potencialDeCliente(currentClient).find(x => x.ID === id);
   if(!p) return;
   editingPotencialId = id;
   document.getElementById('form-potencial-titulo').textContent = 'Editar potencial';
@@ -1695,7 +1725,7 @@ document.getElementById('btn-guardar-potencial').addEventListener('click', async
   const msg = document.getElementById('save-msg-potencial');
   const btn = document.getElementById('btn-guardar-potencial');
 
-  const payload = { cliente: currentClient.nombre, lineaProducto, categoria, comentario };
+  const payload = { cliente: currentClient.id, lineaProducto, categoria, comentario };
 
   btn.disabled = true; msg.style.color='var(--ink-faint)'; msg.textContent = editingPotencialId ? 'Guardando cambios...' : 'Guardando...';
   try{
@@ -2052,13 +2082,18 @@ function procesarArchivoClientes(wb){
   const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
   const sinCoords = new Set();
+  // dedupe solo por (cliente + ciudad) exactos — así un mismo cliente con varias
+  // sucursales en distintas ciudades se conserva como varias filas (una por sucursal),
+  // en vez de quedarse solo con la primera ciudad que aparezca.
   const vistos = new Set();
   const rows = [];
   json.forEach(row => {
     const nombre = row['ClienteGrupo'];
-    if(!nombre || vistos.has(nombre)) return;
-    vistos.add(nombre);
+    if(!nombre) return;
     const ciudad = (row['Ciudad'] || '').toString().trim();
+    const claveUnica = nombre + '||' + ciudad;
+    if(vistos.has(claveUnica)) return;
+    vistos.add(claveUnica);
     const division = (row['Division'] || row['División'] || '').toString().trim();
     const coords = COORDS_CIUDAD[normCiudad(ciudad)];
     if(!coords) sinCoords.add(ciudad || '(sin ciudad)');
