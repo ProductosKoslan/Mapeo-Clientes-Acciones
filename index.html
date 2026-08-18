@@ -967,15 +967,14 @@ function recomputeVentaTotals(){
   anoActualVentas = anosOrdenados[anosOrdenados.length - 1] || '';
   anoAnteriorVentas = anosOrdenados[anosOrdenados.length - 2] || '';
 
+  // por sucursal (id), no solo por nombre de cliente — así la venta se ve separada por
+  // sucursal en clientes con más de una ubicación.
   ventaTotalByCliente = {};
   ventaAnteriorByCliente = {};
-  Object.keys(VENTAS_RAW).forEach(nombre => {
-    ventaTotalByCliente[nombre] = VENTAS_RAW[nombre]
-      .filter(v => v[0] === anoActualVentas)
-      .reduce((s, v) => s + (v[5] || 0), 0);
-    ventaAnteriorByCliente[nombre] = VENTAS_RAW[nombre]
-      .filter(v => v[0] === anoAnteriorVentas)
-      .reduce((s, v) => s + (v[5] || 0), 0);
+  clientes.forEach(c => {
+    const ventas = ventasDeCliente(c);
+    ventaTotalByCliente[c.id] = ventas.filter(v => v[0] === anoActualVentas).reduce((s, v) => s + (v[5] || 0), 0);
+    ventaAnteriorByCliente[c.id] = ventas.filter(v => v[0] === anoAnteriorVentas).reduce((s, v) => s + (v[5] || 0), 0);
   });
   ventaMaxGlobal = Math.max(0, ...Object.values(ventaTotalByCliente));
   configurarSliderMonto();
@@ -1268,7 +1267,7 @@ function updateFiltrosBadge(){
    FILTER LOGIC
    ========================================================= */
 function clienteTieneLinea(c, code){
-  const ventas = VENTAS_RAW[c.nombre];
+  const ventas = ventasDeCliente(c);
   if(ventas && ventas.some(v => v[1] === code)) return true;
   const acts = actividadesDeCliente(c);
   if(acts && acts.some(a => (a.LineaProducto||'').toString() === code)) return true;
@@ -1306,9 +1305,9 @@ function clienteTieneTipoActividad(c){
   return acts.some(a => state.tiposActividad.has(a.Tipo));
 }
 
-function clienteTendencia(nombre){
-  const anterior = ventaAnteriorByCliente[nombre] || 0;
-  const actual = ventaTotalByCliente[nombre] || 0;
+function clienteTendencia(c){
+  const anterior = ventaAnteriorByCliente[c.id] || 0;
+  const actual = ventaTotalByCliente[c.id] || 0;
   if(anterior <= 0) return null; // sin venta el año anterior: no aplica "caída" ni "crecimiento" (sería cliente nuevo)
   if(actual < anterior) return 'caida';
   if(actual > anterior) return 'crecimiento';
@@ -1327,7 +1326,7 @@ function clientePasaFiltros(c){
     if(!clienteTieneSeguimientoEnRango(c)) return false;
   }
   if(state.montoMinimo > 0){
-    if((ventaTotalByCliente[c.nombre] || 0) < state.montoMinimo) return false;
+    if((ventaTotalByCliente[c.id] || 0) < state.montoMinimo) return false;
   }
   if(state.actividadFiltro){
     const tieneActividad = actividadesDeCliente(c).length > 0;
@@ -1338,18 +1337,18 @@ function clientePasaFiltros(c){
     if(!clienteTieneTipoActividad(c)) return false;
   }
   if(state.tendencia){
-    if(clienteTendencia(c.nombre) !== state.tendencia) return false;
+    if(clienteTendencia(c) !== state.tendencia) return false;
   }
   if(state.potencialLineas.size || state.potencialCategoria){
     if(!clienteTienePotencial(c)) return false;
   }
   if(state.proveedorFiltro){
-    const ventas = VENTAS_RAW[c.nombre];
-    if(!ventas || !ventas.some(v => v[3] && v[3].toString().toLowerCase().includes(state.proveedorFiltro.toLowerCase()))) return false;
+    const ventas = ventasDeCliente(c);
+    if(!ventas.length || !ventas.some(v => v[3] && v[3].toString().toLowerCase().includes(state.proveedorFiltro.toLowerCase()))) return false;
   }
   if(state.tipoArticuloFiltro){
-    const ventas = VENTAS_RAW[c.nombre];
-    if(!ventas || !ventas.some(v => v[2] && v[2].toString().toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase()))) return false;
+    const ventas = ventasDeCliente(c);
+    if(!ventas.length || !ventas.some(v => v[2] && v[2].toString().toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase()))) return false;
   }
   if(state.search && !c.nombre.toLowerCase().includes(state.search)) return false;
   return true;
@@ -1844,7 +1843,7 @@ function actualizarLabelsPeriodo(){
 }
 
 function renderVentas(){
-  const ventas = VENTAS_RAW[currentClient.nombre] || [];
+  const ventas = ventasDeCliente(currentClient);
   const summary = document.getElementById('venta-summary');
   const lineaFiltroEl = document.getElementById('venta-filtro-linea');
   const tbody = document.getElementById('venta-tbody');
@@ -1970,15 +1969,33 @@ function normLP(v){
 }
 
 function ventasSheetRowsToRaw(rows){
-  // rows: [Cliente, Ano, LineaProducto, TipoArticulo, Proveedor, Q, VentaNeta]
+  // rows: [Cliente, Ano, LineaProducto, TipoArticulo, Proveedor, Q, VentaNeta, Ciudad]
+  // Se guarda bajo la clave "Cliente — Ciudad" (misma que el id de sucursal de los clientes)
+  // cuando la venta trae ciudad, para poder mostrarla separada por sucursal. Si la venta no
+  // trae ciudad (dato antiguo o fila incompleta), se guarda solo bajo el nombre del cliente
+  // como respaldo — ventasDeCliente() sabe leer ambas formas.
   const raw = {};
   rows.forEach(r => {
-    const [cliente, ano, linProd, tipoArt, proveedor, q, ventaNeta] = r;
+    const [cliente, ano, linProd, tipoArt, proveedor, q, ventaNeta, ciudad] = r;
     if(!cliente) return;
-    if(!raw[cliente]) raw[cliente] = [];
-    raw[cliente].push([String(ano), normLP(linProd), tipoArt, proveedor, Number(q)||0, Number(ventaNeta)||0]);
+    const clave = ciudad ? (cliente + ' — ' + ciudad) : cliente;
+    if(!raw[clave]) raw[clave] = [];
+    raw[clave].push([String(ano), normLP(linProd), tipoArt, proveedor, Number(q)||0, Number(ventaNeta)||0]);
   });
   return raw;
+}
+
+// Ventas de una sucursal específica: usa lo guardado bajo su id (Cliente — Ciudad) si existe;
+// si el cliente tiene UNA sola sucursal, además suma lo guardado solo bajo el nombre (ventas
+// antiguas sin ciudad, o filas del Excel sin ese dato). Con varias sucursales, si esta en
+// particular no tiene ventas propias registradas, se muestra vacía en vez de "prestarle" el
+// total de otra sucursal.
+function ventasDeCliente(c){
+  const porId = VENTAS_RAW[c.id] || [];
+  if(clienteBranchCount[c.nombre] === 1){
+    return porId.concat(VENTAS_RAW[c.nombre] || []);
+  }
+  return porId;
 }
 
 async function cargarActividades(){
@@ -2104,14 +2121,16 @@ async function procesarArchivoVentas(wb){
   json.forEach(row => {
     const cliente = row['ClienteGrupo'];
     if(!cliente) return;
+    const ciudad = (row['Ciudad'] || '').toString().trim();
     const ano = String(row['año'] ?? row['Año'] ?? row['ano'] ?? '');
     const linProd = String(row['Lin Prod'] ?? row['LinProd'] ?? '').padStart(2, '0');
     const tipoArt = (row['DescTipoArt'] ?? 'Sin especificar').toString().trim();
     const proveedor = limpiarNombreProveedor(row['Proveedordefaultdesc']);
     const q = Number(row['Q']) || 0;
     const ventaNeta = Number(row['VentaNeta']) || 0;
-    const key = cliente+'|'+ano+'|'+linProd+'|'+tipoArt+'|'+proveedor;
-    if(!agg[key]) agg[key] = { cliente, ano, linProd, tipoArt, proveedor, q:0, ventaNeta:0 };
+    // la Ciudad entra a la clave de agrupación para poder separar la venta por sucursal
+    const key = cliente+'|'+ciudad+'|'+ano+'|'+linProd+'|'+tipoArt+'|'+proveedor;
+    if(!agg[key]) agg[key] = { cliente, ciudad, ano, linProd, tipoArt, proveedor, q:0, ventaNeta:0 };
     agg[key].q += q;
     agg[key].ventaNeta += ventaNeta;
 
@@ -2128,7 +2147,7 @@ async function procesarArchivoVentas(wb){
     vendedorPorClienteUpload[cliente] = Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
   });
 
-  return Object.values(agg).map(g => [g.cliente, g.ano, g.linProd, g.tipoArt, g.proveedor, Math.round(g.q*10)/10, Math.round(g.ventaNeta)]);
+  return Object.values(agg).map(g => [g.cliente, g.ano, g.linProd, g.tipoArt, g.proveedor, Math.round(g.q*10)/10, Math.round(g.ventaNeta), g.ciudad]);
 }
 
 function procesarArchivoClientes(wb){
