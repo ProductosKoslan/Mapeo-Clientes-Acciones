@@ -152,6 +152,10 @@
     border:1px solid var(--line); border-radius:7px; padding:6px 8px; font-size:12.5px;
     font-family:'IBM Plex Sans'; color:var(--ink); background:var(--surface); min-width:150px;
   }
+  .filter-group input[type=text]{
+    border:1px solid var(--line); border-radius:7px; padding:6px 8px; font-size:12.5px;
+    font-family:'IBM Plex Sans'; color:var(--ink); background:var(--surface); min-width:170px;
+  }
 
   .search-box{ position:relative; width:230px; flex-shrink:0; }
   .search-box input{
@@ -305,18 +309,10 @@
   .actlinea-card .al-row{ display:flex; justify-content:space-between; font-size:11px; color:var(--ink-soft); }
   .actlinea-card .al-row b{ font-family:'IBM Plex Mono',monospace; color:var(--ink); }
 
-  .actlinea-list{ max-height:340px; overflow-y:auto; }
-  .actlinea-row{
-    display:flex; align-items:flex-start; gap:10px; padding:9px 8px; border-radius:8px; cursor:pointer;
-    border:1px solid transparent;
-  }
-  .actlinea-row:hover{ background:var(--surface-2); border-color:var(--line); }
-  .actlinea-row .al-dot{ width:8px; height:8px; border-radius:50%; margin-top:5px; flex-shrink:0; }
-  .actlinea-row .al-body{ flex:1; min-width:0; }
-  .actlinea-row .al-top{ display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
-  .actlinea-row .al-cliente{ font-weight:600; font-size:12.5px; }
-  .actlinea-row .al-desc{ font-size:12px; color:var(--ink-soft); margin-top:2px; line-height:1.35; }
-  .actlinea-row .al-date{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-faint); white-space:nowrap; margin-left:8px; }
+  .actlinea-list{ max-height:400px; overflow-y:auto; overflow-x:auto; }
+  #actlinea-table tbody tr{ cursor:pointer; }
+  #actlinea-table tbody tr:hover{ background:var(--surface-2); }
+  #actlinea-table td.fecha-vencida{ color:var(--red); font-weight:600; }
   .tab-btn{
     border:none; background:none; padding:10px 4px; margin-right:22px; font-size:13.5px; font-weight:600;
     color:var(--ink-faint); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;
@@ -392,6 +388,8 @@
   table.venta-table th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--ink-faint); padding:6px 8px; border-bottom:1px solid var(--line); }
   table.venta-table td{ padding:7px 8px; border-bottom:1px solid var(--surface-2); }
   table.venta-table td.num{ font-family:'IBM Plex Mono',monospace; text-align:right; }
+  table.venta-table th.sorted{ color:var(--teal-dark); }
+  table.venta-table th .sort-arrow{ font-size:9px; color:var(--teal); }
   .growth-up{ color:var(--canal-agricola); font-weight:600; }
   .growth-down{ color:var(--red); font-weight:600; }
   .growth-flat{ color:var(--ink-faint); }
@@ -503,6 +501,16 @@
                 <option value="Bajo">Bajo</option>
               </select>
             </div>
+            <div class="filter-group">
+              <label>Proveedor</label>
+              <input type="text" id="filter-proveedor" list="datalist-proveedor" placeholder="Todos" autocomplete="off">
+              <datalist id="datalist-proveedor"></datalist>
+            </div>
+            <div class="filter-group">
+              <label>Tipo de artículo</label>
+              <input type="text" id="filter-tipo-articulo" list="datalist-tipo-articulo" placeholder="Todos" autocomplete="off">
+              <datalist id="datalist-tipo-articulo"></datalist>
+            </div>
           </div>
           <div class="filtros-panel-footer">
             <button class="btn-clear" id="btn-clear-filters">Limpiar filtros</button>
@@ -527,9 +535,7 @@
     <div id="map"></div>
     <div class="legend">
       <div class="lg-title">Canal predominante</div>
-      <div class="lg-row"><span class="lg-dot" style="background:var(--canal-distribucion)"></span> Distribución</div>
-      <div class="lg-row"><span class="lg-dot" style="background:var(--canal-edificacion)"></span> Esp. Edificación</div>
-      <div class="lg-row"><span class="lg-dot" style="background:var(--canal-agricola)"></span> Esp. Agrícola</div>
+      <div id="legend-canales"></div>
       <div class="lg-row" style="margin-top:6px;"><span class="lg-dot" style="background:var(--red)"></span> Con seguim. vencido</div>
     </div>
     <div class="map-attribution-note">Datos: base interna de clientes y ventas</div>
@@ -556,6 +562,10 @@
     <div class="field" style="margin-bottom:14px;">
       <label>Clave de administrador</label>
       <input type="password" id="upload-admin-key" placeholder="Solo quien administra los datos la conoce" autocomplete="off">
+    </div>
+    <div class="field" style="margin-bottom:14px;">
+      <label>Período de venta considerado (ej: "Enero-Julio")</label>
+      <input type="text" id="upload-periodo" placeholder="Se muestra junto al año en la pestaña Ventas">
     </div>
     <div class="drop-zone" id="drop-zone">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="opacity:.6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -590,7 +600,20 @@
     <div id="actlinea-summary" class="actlinea-summary"></div>
 
     <div class="hist-title" style="margin-top:4px;">Detalle</div>
-    <div id="actlinea-list" class="actlinea-list"></div>
+    <div class="actlinea-list">
+      <table class="venta-table" id="actlinea-table">
+        <thead><tr>
+          <th style="cursor:pointer;" data-sort="Cliente">Cliente <span class="sort-arrow"></span></th>
+          <th style="cursor:pointer;" data-sort="Tipo">Tipo <span class="sort-arrow"></span></th>
+          <th style="cursor:pointer;" data-sort="LineaProducto">Línea <span class="sort-arrow"></span></th>
+          <th style="cursor:pointer;" data-sort="Ciudad">Ciudad <span class="sort-arrow"></span></th>
+          <th style="cursor:pointer;" data-sort="FechaRegistro">Fecha registro <span class="sort-arrow"></span></th>
+          <th style="cursor:pointer;" data-sort="FechaSeguimiento">Fecha seguimiento <span class="sort-arrow"></span></th>
+          <th>Descripción</th>
+        </tr></thead>
+        <tbody id="actlinea-tbody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -599,7 +622,7 @@
     <div class="modal-head">
       <button class="modal-close" id="modal-close">✕</button>
       <div class="modal-title" id="modal-client-name">—</div>
-      <div class="modal-sub"><span id="modal-client-city">—</span><span id="modal-client-canal"></span></div>
+      <div class="modal-sub"><span id="modal-client-city">—</span><span id="modal-client-canal"></span><span id="modal-client-vendedor"></span></div>
       <div class="tabs">
         <button class="tab-btn active" data-tab="seguimiento">Seguimiento</button>
         <button class="tab-btn" data-tab="potencial">Potencial</button>
@@ -690,8 +713,8 @@
           <table class="venta-table" id="venta-table">
             <thead><tr id="venta-thead-row">
               <th>Línea</th><th>Tipo de artículo</th><th>Proveedor</th>
-              <th style="text-align:right" id="th-ano-1">Año A</th>
-              <th style="text-align:right" id="th-ano-2">Año B</th>
+              <th style="text-align:right;cursor:pointer;" data-sort="vA"><span id="th-ano-1">Año A</span> <span class="sort-arrow"></span></th>
+              <th style="text-align:right;cursor:pointer;" data-sort="vB"><span id="th-ano-2">Año B</span> <span class="sort-arrow"></span></th>
               <th style="text-align:right">Crecimiento</th>
             </tr></thead>
             <tbody id="venta-tbody"></tbody>
@@ -717,23 +740,41 @@ const LINEA_ORDER = ["01","02","03","04","05","07"];
 const CANAL_MAP = {
   "Koslan Distribución": "Distribución",
   "Especialista Edificación": "Especialista Edificación",
-  "Especialista Agrícola": "Especialista Agrícola"
+  "Especialista Agrícola": "Especialista Agrícola",
+  "Grandes Superficies": "Grandes Superficies",
+  "E-Commerce": "E-Commerce",
+  "Productos": "Productos"
 };
-const CANAL_CLASS = {
-  "Distribución": "tag-distribucion",
-  "Especialista Edificación": "tag-edificacion",
-  "Especialista Agrícola": "tag-agricola"
-};
-const CANAL_COLOR = {
-  "Distribución": "var(--canal-distribucion)",
-  "Especialista Edificación": "var(--canal-edificacion)",
-  "Especialista Agrícola": "var(--canal-agricola)"
-};
-const CANAL_DOT_HEX = {
+// Colores curados para los canales conocidos; cualquier canal nuevo que aparezca en los datos
+// (que no esté en esta lista) recibe un color determinístico de PALETA_CANAL_FALLBACK, así los
+// filtros y el mapa nunca se rompen aunque se agregue un canal sin tocar el código.
+const CANAL_COLOR_HEX = {
   "Distribución": "#2E6F9E",
   "Especialista Edificación": "#6C4F9E",
-  "Especialista Agrícola": "#4C8C3B"
+  "Especialista Agrícola": "#4C8C3B",
+  "Grandes Superficies": "#B5652D",
+  "E-Commerce": "#1E93A6",
+  "Productos": "#6B7785"
 };
+const PALETA_CANAL_FALLBACK = ["#A8552E","#7A5CA8","#2E9E7A","#9E2E5C","#5C7A2E","#2E6E9E"];
+function colorCanal(canal){
+  if(CANAL_COLOR_HEX[canal]) return CANAL_COLOR_HEX[canal];
+  let hash = 0;
+  for(let i=0;i<canal.length;i++) hash = (hash*31 + canal.charCodeAt(i)) >>> 0;
+  return PALETA_CANAL_FALLBACK[hash % PALETA_CANAL_FALLBACK.length];
+}
+function hexToRgb_(hex){
+  const h = hex.replace('#','');
+  return [parseInt(h.substring(0,2),16), parseInt(h.substring(2,4),16), parseInt(h.substring(4,6),16)];
+}
+function canalTagStyle(canal){
+  const hex = colorCanal(canal);
+  const [r,g,b] = hexToRgb_(hex);
+  return `background:rgba(${r},${g},${b},0.14);color:${hex};`;
+}
+function canalTagHtml(canal){
+  return `<span class="tag" style="${canalTagStyle(canal)}">${canal}</span>`;
+}
 
 /* =========================================================
    DATA (embebida — datos iniciales; se reemplazan por lo que
@@ -759,7 +800,8 @@ function clientesRawToObjects(raw){
   return raw.map(c => ({
     nombre: c[0], ciudad: c[1], divisionRaw: c[2],
     canal: CANAL_MAP[c[2]] || (c[2] || "Sin canal"),
-    lat: c[3], lon: c[4]
+    lat: c[3], lon: c[4],
+    vendedor: c[5] || ''
   }));
 }
 
@@ -787,6 +829,7 @@ function esCompletada(a){
 }
 
 let potencial = []; // desde Google Sheet
+let periodoVentas = ''; // ej: "Enero-Julio", lo define el administrador al subir los datos
 let pendientesActuales = []; // {cliente, actividad} — seguimientos vencidos visibles con los filtros actuales
 let potencialByCliente = {};
 
@@ -829,6 +872,7 @@ function recomputeVentaTotals(){
   });
   ventaMaxGlobal = Math.max(0, ...Object.values(ventaTotalByCliente));
   configurarSliderMonto();
+  buildDatalistsVentas();
 }
 
 function configurarSliderMonto(){
@@ -867,7 +911,9 @@ const state = {
   potencialLineas: new Set(), // vacío = todas
   potencialCategoria: "",      // "" | "Alto" | "Medio" | "Bajo"
   tiposActividad: new Set(),   // vacío = todos ("Visita" | "Capacitación" | "Acción")
-  tendencia: ""                // "" | "caida" | "crecimiento"
+  tendencia: "",                // "" | "caida" | "crecimiento"
+  proveedorFiltro: "",
+  tipoArticuloFiltro: ""
 };
 
 /* =========================================================
@@ -885,20 +931,31 @@ let cityMarkers = {}; // key "lat,lon" -> marker
 /* =========================================================
    BUILD FILTER CHIPS
    ========================================================= */
-const canalOptions = ["Distribución", "Especialista Edificación", "Especialista Agrícola"];
 const filterCanalEl = document.getElementById('filter-canal');
-canalOptions.forEach(c => {
-  const chip = document.createElement('div');
-  chip.className = 'chip';
-  chip.textContent = c;
-  chip.dataset.canal = c;
-  chip.addEventListener('click', () => {
-    if(state.canales.has(c)){ state.canales.delete(c); chip.classList.remove('active'); }
-    else { state.canales.add(c); chip.classList.add('active'); }
-    refresh();
+function buildCanalChips(){
+  const canales = [...new Set(clientes.map(c => c.canal))].sort((a,b)=>a.localeCompare(b));
+  filterCanalEl.innerHTML = '';
+  canales.forEach(c => {
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (state.canales.has(c) ? ' active' : '');
+    chip.textContent = c;
+    chip.dataset.canal = c;
+    chip.addEventListener('click', () => {
+      if(state.canales.has(c)){ state.canales.delete(c); chip.classList.remove('active'); }
+      else { state.canales.add(c); chip.classList.add('active'); }
+      refresh();
+    });
+    filterCanalEl.appendChild(chip);
   });
-  filterCanalEl.appendChild(chip);
-});
+  buildLegend();
+}
+function buildLegend(){
+  const el = document.getElementById('legend-canales');
+  if(!el) return;
+  const canales = [...new Set(clientes.map(c => c.canal))].sort((a,b)=>a.localeCompare(b));
+  el.innerHTML = canales.map(c => `<div class="lg-row"><span class="lg-dot" style="background:${colorCanal(c)}"></span> ${c}</div>`).join('');
+}
+buildCanalChips();
 
 const filterLineaEl = document.getElementById('filter-linea');
 LINEA_ORDER.forEach(code => {
@@ -944,6 +1001,22 @@ TIPOS_ACTIVIDAD.forEach(tipo => {
 
 document.getElementById('filter-tendencia').addEventListener('change', e => { state.tendencia = e.target.value; refresh(); });
 
+document.getElementById('filter-proveedor').addEventListener('input', e => { state.proveedorFiltro = e.target.value.trim(); refresh(); });
+document.getElementById('filter-tipo-articulo').addEventListener('input', e => { state.tipoArticuloFiltro = e.target.value.trim(); refresh(); });
+
+function buildDatalistsVentas(){
+  const proveedores = new Set();
+  const tiposArt = new Set();
+  Object.values(VENTAS_RAW).forEach(rows => rows.forEach(v => {
+    if(v[3]) proveedores.add(v[3]); // proveedor
+    if(v[2]) tiposArt.add(v[2]);    // tipoArticulo
+  }));
+  const dlProv = document.getElementById('datalist-proveedor');
+  dlProv.innerHTML = [...proveedores].sort().map(p => `<option value="${p.replace(/"/g,'&quot;')}">`).join('');
+  const dlTipo = document.getElementById('datalist-tipo-articulo');
+  dlTipo.innerHTML = [...tiposArt].sort().map(t => `<option value="${t.replace(/"/g,'&quot;')}">`).join('');
+}
+
 const filterPotencialLineaEl = document.getElementById('filter-potencial-linea');
 LINEA_ORDER.forEach(code => {
   const chip = document.createElement('div');
@@ -965,6 +1038,7 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   state.potencialLineas.clear(); state.potencialCategoria = "";
   state.tiposActividad.clear();
   state.tendencia = "";
+  state.proveedorFiltro = ""; state.tipoArticuloFiltro = "";
   document.querySelectorAll('.chip.active').forEach(c => c.classList.remove('active'));
   document.getElementById('fecha-desde').value = "";
   document.getElementById('fecha-hasta').value = "";
@@ -974,6 +1048,8 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   document.getElementById('filter-actividad').value = "";
   document.getElementById('filter-potencial-categoria').value = "";
   document.getElementById('filter-tendencia').value = "";
+  document.getElementById('filter-proveedor').value = "";
+  document.getElementById('filter-tipo-articulo').value = "";
   refresh();
 });
 
@@ -1060,6 +1136,8 @@ function updateFiltrosBadge(){
   if(state.potencialCategoria) n++;
   n += state.tiposActividad.size;
   if(state.tendencia) n++;
+  if(state.proveedorFiltro) n++;
+  if(state.tipoArticuloFiltro) n++;
   const badge = document.getElementById('filtros-badge');
   if(n > 0){ badge.style.display='flex'; badge.textContent = n; }
   else { badge.style.display='none'; }
@@ -1144,6 +1222,14 @@ function clientePasaFiltros(c){
   if(state.potencialLineas.size || state.potencialCategoria){
     if(!clienteTienePotencial(c.nombre)) return false;
   }
+  if(state.proveedorFiltro){
+    const ventas = VENTAS_RAW[c.nombre];
+    if(!ventas || !ventas.some(v => v[3] && v[3].toLowerCase().includes(state.proveedorFiltro.toLowerCase()))) return false;
+  }
+  if(state.tipoArticuloFiltro){
+    const ventas = VENTAS_RAW[c.nombre];
+    if(!ventas || !ventas.some(v => v[2] && v[2].toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase()))) return false;
+  }
   if(state.search && !c.nombre.toLowerCase().includes(state.search)) return false;
   return true;
 }
@@ -1194,7 +1280,7 @@ function refresh(){
     const counts = {};
     grupo.clientes.forEach(c => counts[c.canal] = (counts[c.canal]||0)+1);
     let domCanal = Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
-    let color = CANAL_DOT_HEX[domCanal] || '#5B6B70';
+    let color = colorCanal(domCanal);
     if(vencido) color = '#C6472E';
 
     const size = Math.min(46, 22 + Math.sqrt(n)*6);
@@ -1234,7 +1320,8 @@ function openDrawer(grupo){
       row.innerHTML = `
         <div class="cn">${c.nombre}</div>
         <div class="meta">
-          <span class="tag ${CANAL_CLASS[c.canal]||''}">${c.canal}</span>
+          ${canalTagHtml(c.canal)}
+          ${c.vendedor ? `<span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">${c.vendedor}</span>` : ''}
           ${nAct ? `<span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">${nAct} registro${nAct>1?'s':''}</span>` : ''}
           ${vencido ? `<span class="tag tag-overdue">Seguimiento vencido</span>` : ''}
         </div>`;
@@ -1316,7 +1403,10 @@ function openModal(c){
   document.getElementById('modal-client-name').textContent = c.nombre;
   document.getElementById('modal-client-city').textContent = c.ciudad;
   const canalEl = document.getElementById('modal-client-canal');
-  canalEl.innerHTML = `<span class="tag ${CANAL_CLASS[c.canal]||''}">${c.canal}</span>`;
+  canalEl.innerHTML = canalTagHtml(c.canal);
+  document.getElementById('modal-client-vendedor').innerHTML = c.vendedor
+    ? `<span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">Vendedor: ${c.vendedor}</span>`
+    : `<span class="tag" style="background:var(--surface-2);color:var(--ink-faint)">Sin vendedor asignado</span>`;
 
   resetFormularioActividad();
   resetFormularioPotencial();
@@ -1603,6 +1693,26 @@ document.getElementById('btn-guardar-potencial').addEventListener('click', async
    VENTAS (complementario)
    ========================================================= */
 let ventaLineasSeleccionadas = new Set();
+let ventaSortState = { campo: 'vB', dir: 'desc' }; // por defecto: venta del año más reciente, de mayor a menor
+document.querySelectorAll('#venta-table th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const campo = th.dataset.sort;
+    if(ventaSortState.campo === campo) ventaSortState.dir = ventaSortState.dir === 'desc' ? 'asc' : 'desc';
+    else { ventaSortState.campo = campo; ventaSortState.dir = 'desc'; }
+    if(currentClient) renderVentas();
+  });
+});
+
+// Etiqueta de año que incluye el período de venta considerado (ej: "Ene-Jul 2026"),
+// definido por el administrador al subir los datos. Si no se definió, muestra solo el año.
+function etiquetaAno(ano){
+  if(!ano) return '—';
+  return periodoVentas ? (periodoVentas + ' ' + ano) : ano;
+}
+function actualizarLabelsPeriodo(){
+  configurarSliderMonto();
+  if(currentClient && document.getElementById('panel-ventas').classList.contains('active')) renderVentas();
+}
 
 function renderVentas(){
   const ventas = VENTAS_RAW[currentClient.nombre] || [];
@@ -1641,8 +1751,8 @@ function renderVentas(){
   const anoB = anoActualVentas;
   const anoA = anoAnteriorVentas;
 
-  document.getElementById('th-ano-1').textContent = anoA ? ('Venta ' + anoA) : '—';
-  document.getElementById('th-ano-2').textContent = anoB ? ('Venta ' + anoB) : '—';
+  document.getElementById('th-ano-1').textContent = anoA ? ('Venta ' + etiquetaAno(anoA)) : '—';
+  document.getElementById('th-ano-2').textContent = anoB ? ('Venta ' + etiquetaAno(anoB)) : '—';
 
   const totalA = ventas.filter(v=>v[0]===anoA).reduce((s,v)=>s+v[5],0);
   const totalB = ventas.filter(v=>v[0]===anoB).reduce((s,v)=>s+v[5],0);
@@ -1650,7 +1760,7 @@ function renderVentas(){
   const crecTotal = totalA > 0 ? ((totalB-totalA)/totalA*100) : (totalB>0 ? null : 0);
 
   function crecHtml(pct, base, comp){
-    if(pct === null) return `<span class="tag" style="background:var(--teal-soft);color:var(--teal-dark)">Nuevo en ${anoB}</span>`;
+    if(pct === null) return `<span class="tag" style="background:var(--teal-soft);color:var(--teal-dark)">Nuevo en ${etiquetaAno(anoB)}</span>`;
     if(base===0 && comp===0) return '<span class="growth-flat">—</span>';
     const cls = pct > 0.5 ? 'growth-up' : (pct < -0.5 ? 'growth-down' : 'growth-flat');
     const sign = pct > 0 ? '+' : '';
@@ -1659,8 +1769,8 @@ function renderVentas(){
 
   summary.innerHTML = `
     <div class="venta-kpi"><div class="v-num">$${Math.round(totalNeta).toLocaleString('es-CL')}</div><div class="v-lbl">Venta neta total</div></div>
-    <div class="venta-kpi"><div class="v-num">$${Math.round(totalA).toLocaleString('es-CL')}</div><div class="v-lbl">Venta ${anoA||'—'}</div></div>
-    <div class="venta-kpi"><div class="v-num">$${Math.round(totalB).toLocaleString('es-CL')}</div><div class="v-lbl">Venta ${anoB||'—'}</div></div>
+    <div class="venta-kpi"><div class="v-num">$${Math.round(totalA).toLocaleString('es-CL')}</div><div class="v-lbl">Venta ${etiquetaAno(anoA)}</div></div>
+    <div class="venta-kpi"><div class="v-num">$${Math.round(totalB).toLocaleString('es-CL')}</div><div class="v-lbl">Venta ${etiquetaAno(anoB)}</div></div>
     <div class="venta-kpi"><div class="v-num">${crecHtml(crecTotal, totalA, totalB)}</div><div class="v-lbl">Crecimiento ${anoA||'—'}→${anoB||'—'}</div></div>
   `;
 
@@ -1670,13 +1780,22 @@ function renderVentas(){
     ventas.forEach(v => {
       const [ano, linProd, tipoArt, proveedor, q, ventaNeta] = v;
       if(ventaLineasSeleccionadas.size && !ventaLineasSeleccionadas.has(linProd)) return;
+      if(state.proveedorFiltro && !proveedor.toLowerCase().includes(state.proveedorFiltro.toLowerCase())) return;
+      if(state.tipoArticuloFiltro && !tipoArt.toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase())) return;
       const key = linProd+'|'+tipoArt+'|'+proveedor;
       if(!grupos[key]) grupos[key] = { linProd, tipoArt, proveedor, vA:0, vB:0 };
       if(ano === anoA) grupos[key].vA += ventaNeta;
       else if(ano === anoB) grupos[key].vB += ventaNeta;
     });
 
-    const rows = Object.values(grupos).sort((a,b)=> (b.vA+b.vB) - (a.vA+a.vB));
+    let rows = Object.values(grupos);
+    const campo = ventaSortState.campo, dir = ventaSortState.dir;
+    rows.sort((a,b) => (a[campo]-b[campo]) * (dir==='desc'?-1:1));
+
+    document.querySelectorAll('#venta-table th[data-sort]').forEach(th => {
+      th.classList.toggle('sorted', th.dataset.sort===campo);
+      th.querySelector('.sort-arrow').textContent = th.dataset.sort===campo ? (dir==='desc'?'▼':'▲') : '';
+    });
 
     tbody.innerHTML = rows.map(g => {
       const color = (getComputedStyle(document.documentElement).getPropertyValue('--lp-'+g.linProd) || '#999').trim();
@@ -1744,10 +1863,13 @@ async function cargarActividades(){
       }
       // idem para clientes: si ya se subió una actualización, manda sobre la lista embebida inicial
       if(data.clientesData && data.clientesData.length){
-        const rawClientes = data.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4])]);
+        const rawClientes = data.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
         clientes = clientesRawToObjects(rawClientes);
         rebuildClienteIndex();
       }
+      periodoVentas = data.periodoVentas || '';
+      actualizarLabelsPeriodo();
+      buildCanalChips();
     }
   }catch(err){
     console.error('No se pudo cargar datos desde Google Sheet', err);
@@ -1778,6 +1900,7 @@ document.getElementById('btn-abrir-upload').addEventListener('click', () => {
   uploadStatus.textContent = ''; uploadStatus.className = '';
   btnConfirmarUpload.disabled = true;
   try{ uploadAdminKeyInput.value = localStorage.getItem(ADMIN_KEY_STORAGE) || ''; }catch(e){}
+  document.getElementById('upload-periodo').value = periodoVentas || '';
   uploadOverlay.classList.add('open');
 });
 document.getElementById('upload-close').addEventListener('click', () => uploadOverlay.classList.remove('open'));
@@ -1806,13 +1929,17 @@ function limpiarNombreProveedor(p){
   return sp > -1 ? s.slice(sp+1).trim() : s;
 }
 
+let vendedorPorClienteUpload = {}; // se llena al procesar Ventas, se usa luego al armar Clientes
+
 async function procesarArchivoVentas(wb){
   const sheetName = wb.SheetNames.includes('Ventas') ? 'Ventas' : null;
+  vendedorPorClienteUpload = {};
   if(!sheetName) return [];
   const sheet = wb.Sheets[sheetName];
   const json = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
   const agg = {};
+  const vendedorCounts = {}; // { cliente: { vendedorNombre: count } }
   json.forEach(row => {
     const cliente = row['ClienteGrupo'];
     if(!cliente) return;
@@ -1826,6 +1953,18 @@ async function procesarArchivoVentas(wb){
     if(!agg[key]) agg[key] = { cliente, ano, linProd, tipoArt, proveedor, q:0, ventaNeta:0 };
     agg[key].q += q;
     agg[key].ventaNeta += ventaNeta;
+
+    const vendedor = (row['Vendedor'] || '').toString().trim();
+    if(vendedor){
+      if(!vendedorCounts[cliente]) vendedorCounts[cliente] = {};
+      vendedorCounts[cliente][vendedor] = (vendedorCounts[cliente][vendedor]||0) + 1;
+    }
+  });
+
+  // vendedor "más frecuente" por cliente (el que más veces aparece en sus ventas)
+  Object.keys(vendedorCounts).forEach(cliente => {
+    const counts = vendedorCounts[cliente];
+    vendedorPorClienteUpload[cliente] = Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
   });
 
   return Object.values(agg).map(g => [g.cliente, g.ano, g.linProd, g.tipoArt, g.proveedor, Math.round(g.q*10)/10, Math.round(g.ventaNeta)]);
@@ -1848,7 +1987,8 @@ function procesarArchivoClientes(wb){
     const division = (row['Division'] || row['División'] || '').toString().trim();
     const coords = COORDS_CIUDAD[normCiudad(ciudad)];
     if(!coords) sinCoords.add(ciudad || '(sin ciudad)');
-    rows.push([nombre, ciudad, division, coords ? coords[0] : null, coords ? coords[1] : null]);
+    const vendedor = vendedorPorClienteUpload[nombre] || '';
+    rows.push([nombre, ciudad, division, coords ? coords[0] : null, coords ? coords[1] : null, vendedor]);
   });
   return { rows: rows.filter(r => r[3] !== null), sinCoords: [...sinCoords] };
 }
@@ -1869,8 +2009,10 @@ btnConfirmarUpload.addEventListener('click', async () => {
     const buf = await archivoSeleccionado.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
 
-    const clientesInfo = procesarArchivoClientes(wb);
+    // ventas primero: así conocemos el vendedor más frecuente de cada cliente
+    // antes de armar la fila de clientes (procesarArchivoClientes lo usa).
     const ventasRows = await procesarArchivoVentas(wb);
+    const clientesInfo = procesarArchivoClientes(wb);
 
     if(!clientesInfo.rows.length && !ventasRows.length){
       throw new Error('No se encontraron datos válidos (revisa que el archivo tenga las pestañas "Cliente-Ciudad" y/o "Ventas").');
@@ -1883,6 +2025,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
       if(!data1.ok) throw new Error(data1.error || 'Error desconocido al guardar clientes.');
       clientes = clientesRawToObjects(clientesInfo.rows);
       rebuildClienteIndex();
+      buildCanalChips();
     }
 
     if(ventasRows.length){
@@ -1891,6 +2034,13 @@ btnConfirmarUpload.addEventListener('click', async () => {
       const data2 = await res2.json();
       if(!data2.ok) throw new Error(data2.error || 'Error desconocido al guardar ventas.');
       VENTAS_RAW = ventasSheetRowsToRaw(ventasRows);
+    }
+
+    const periodoInput = document.getElementById('upload-periodo').value.trim();
+    if(periodoInput){
+      const res3 = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'actualizar_periodo', periodo: periodoInput, adminKey }) });
+      const data3 = await res3.json();
+      if(data3.ok){ periodoVentas = periodoInput; actualizarLabelsPeriodo(); }
     }
 
     try{ localStorage.setItem(ADMIN_KEY_STORAGE, adminKey); }catch(e){}
@@ -1919,6 +2069,15 @@ btnConfirmarUpload.addEventListener('click', async () => {
    ========================================================= */
 const actlineaOverlay = document.getElementById('actlinea-overlay');
 const actlineaState = { lineas: new Set(), tipos: new Set() }; // vacío = todas
+let actlineaSortState = { campo: 'FechaSeguimiento', dir: 'desc' };
+document.querySelectorAll('#actlinea-table th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const campo = th.dataset.sort;
+    if(actlineaSortState.campo === campo) actlineaSortState.dir = actlineaSortState.dir === 'desc' ? 'asc' : 'desc';
+    else { actlineaSortState.campo = campo; actlineaSortState.dir = 'desc'; }
+    renderActlinea();
+  });
+});
 
 const actlineaFilterLineaEl = document.getElementById('actlinea-filter-linea');
 LINEA_ORDER.forEach(code => {
@@ -1995,42 +2154,56 @@ function renderActlinea(){
     });
   });
 
-  // lista detallada, filtrada por chips seleccionados
-  const listEl = document.getElementById('actlinea-list');
+  // tabla detallada, filtrada por chips seleccionados y ordenable por columna
+  const tbody = document.getElementById('actlinea-tbody');
   const filtradas = actividades.filter(a => {
     const lp = (a.LineaProducto||'').toString();
     const tipo = (a.Tipo||'').toString().trim();
     if(actlineaState.lineas.size && !actlineaState.lineas.has(lp)) return false;
     if(actlineaState.tipos.size && !actlineaState.tipos.has(tipo)) return false;
     return true;
-  }).sort((a,b) => (b.FechaRegistro||'').toString().localeCompare((a.FechaRegistro||'').toString()));
+  });
+
+  const campo = actlineaSortState.campo, dir = actlineaSortState.dir;
+  filtradas.sort((a,b) => {
+    let va, vb;
+    if(campo === 'Ciudad'){ va = (clienteByNombre[a.Cliente]||{}).ciudad || ''; vb = (clienteByNombre[b.Cliente]||{}).ciudad || ''; }
+    else if(campo === 'LineaProducto'){ va = LINEA_PRODUCTO[a.LineaProducto]||a.LineaProducto||''; vb = LINEA_PRODUCTO[b.LineaProducto]||b.LineaProducto||''; }
+    else { va = (a[campo]||'').toString(); vb = (b[campo]||'').toString(); }
+    const cmp = va.toString().localeCompare(vb.toString());
+    return dir === 'desc' ? -cmp : cmp;
+  });
+
+  document.querySelectorAll('#actlinea-table th[data-sort]').forEach(th => {
+    th.classList.toggle('sorted', th.dataset.sort===campo);
+    th.querySelector('.sort-arrow').textContent = th.dataset.sort===campo ? (dir==='desc'?'▼':'▲') : '';
+  });
 
   if(!filtradas.length){
-    listEl.innerHTML = '<div class="empty-state">No hay actividades registradas con estos filtros.</div>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--ink-faint);padding:16px;">No hay actividades registradas con estos filtros.</td></tr>';
     return;
   }
 
-  listEl.innerHTML = filtradas.map(a => {
+  const t = today();
+  tbody.innerHTML = filtradas.map(a => {
     const lp = (a.LineaProducto||'').toString();
-    const color = (getComputedStyle(document.documentElement).getPropertyValue('--lp-'+lp) || '#999').trim();
     const c = clienteByNombre[a.Cliente];
+    const esAccion = (a.Tipo||'').toString().trim() === 'Acción';
+    const fechaSeg = (a.FechaSeguimiento||'').toString().slice(0,10);
+    const vencida = esAccion && fechaSeg && !esCompletada(a) && fechaSeg < t;
     return `
-    <div class="actlinea-row" data-cliente="${(a.Cliente||'').replace(/"/g,'&quot;')}">
-      <span class="al-dot" style="background:${color}"></span>
-      <div class="al-body">
-        <div class="al-top">
-          <span class="al-cliente">${a.Cliente||''}</span>
-          <span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">${a.Tipo||''}</span>
-          <span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">${LINEA_PRODUCTO[lp]||lp}</span>
-          ${c ? `<span class="tag" style="background:var(--surface-2);color:var(--ink-soft)">${c.ciudad}</span>` : ''}
-          <span class="al-date">${(a.FechaRegistro||'').toString().slice(0,10)}</span>
-        </div>
-        ${a.Descripcion ? `<div class="al-desc">${a.Descripcion}</div>` : ''}
-      </div>
-    </div>`;
+    <tr data-cliente="${(a.Cliente||'').replace(/"/g,'&quot;')}">
+      <td style="font-weight:600;">${a.Cliente||''}</td>
+      <td>${a.Tipo||''}</td>
+      <td><span class="lp-dot" style="background:${(getComputedStyle(document.documentElement).getPropertyValue('--lp-'+lp)||'#999').trim()}"></span>${LINEA_PRODUCTO[lp]||lp}</td>
+      <td>${c ? c.ciudad : ''}</td>
+      <td class="mono">${(a.FechaRegistro||'').toString().slice(0,10)}</td>
+      <td class="mono ${vencida?'fecha-vencida':''}">${esAccion ? (fechaSeg || '—') : '—'}${esAccion && esCompletada(a) ? ' ✓' : ''}</td>
+      <td style="max-width:280px;">${a.Descripcion||''}</td>
+    </tr>`;
   }).join('');
 
-  listEl.querySelectorAll('.actlinea-row').forEach(row => {
+  tbody.querySelectorAll('tr[data-cliente]').forEach(row => {
     row.addEventListener('click', () => {
       const c = clienteByNombre[row.dataset.cliente];
       if(!c) return;
