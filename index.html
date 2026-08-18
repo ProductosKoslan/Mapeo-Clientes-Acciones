@@ -1041,8 +1041,11 @@ function buildDatalistsVentas(){
   const proveedores = new Set();
   const tiposArt = new Set();
   Object.values(VENTAS_RAW).forEach(rows => rows.forEach(v => {
-    if(v[3]) proveedores.add(v[3]); // proveedor
-    if(v[2]) tiposArt.add(v[2]);    // tipoArticulo
+    // .toString() por si Google Sheets guardó un proveedor/tipo de artículo "numérico"
+    // (ej. un código) como número en vez de texto — mismo patrón que ya vimos con
+    // los códigos de línea de producto ("05" guardado como 5).
+    if(v[3]) proveedores.add(v[3].toString()); // proveedor
+    if(v[2]) tiposArt.add(v[2].toString());    // tipoArticulo
   }));
   const dlProv = document.getElementById('datalist-proveedor');
   dlProv.innerHTML = [...proveedores].sort().map(p => `<option value="${p.replace(/"/g,'&quot;')}">`).join('');
@@ -1228,7 +1231,7 @@ function clienteTendencia(nombre){
 }
 
 function clientePasaFiltros(c){
-  if(c.lat == null) return false;
+  if(c.lat == null || c.lon == null || isNaN(c.lat) || isNaN(c.lon)) return false;
   if(state.canales.size && !state.canales.has(c.canal)) return false;
   if(state.lineas.size){
     let ok = false;
@@ -1257,11 +1260,11 @@ function clientePasaFiltros(c){
   }
   if(state.proveedorFiltro){
     const ventas = VENTAS_RAW[c.nombre];
-    if(!ventas || !ventas.some(v => v[3] && v[3].toLowerCase().includes(state.proveedorFiltro.toLowerCase()))) return false;
+    if(!ventas || !ventas.some(v => v[3] && v[3].toString().toLowerCase().includes(state.proveedorFiltro.toLowerCase()))) return false;
   }
   if(state.tipoArticuloFiltro){
     const ventas = VENTAS_RAW[c.nombre];
-    if(!ventas || !ventas.some(v => v[2] && v[2].toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase()))) return false;
+    if(!ventas || !ventas.some(v => v[2] && v[2].toString().toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase()))) return false;
   }
   if(state.search && !c.nombre.toLowerCase().includes(state.search)) return false;
   return true;
@@ -1296,6 +1299,7 @@ function refresh(){
   pendientesActuales = [];
 
   Object.values(porCiudad).forEach(grupo => {
+   try{
     const n = grupo.clientes.length;
     const vencido = grupo.clientes.some(c => clienteTieneVencido(c.nombre));
     if(vencido){
@@ -1322,9 +1326,16 @@ function refresh(){
       html: `<div class="city-marker" style="width:${size}px;height:${size}px;background:${color};font-size:${n>99?10:12}px;">${n}</div>`,
       iconSize:[size,size], iconAnchor:[size/2,size/2]
     });
+    // Un solo grupo con coordenadas corruptas no debe poder tumbar el resto del mapa:
+    // Leaflet lanza una excepción real si lat/lon no son números finitos, y sin este
+    // try/catch eso interrumpía TODO el forEach, dejando el mapa vacío hasta que un
+    // filtro sacara ese cliente de la lista visible.
     const marker = L.marker([grupo.lat, grupo.lon], { icon }).addTo(markerLayer);
     marker.on('click', () => openDrawer(grupo));
     marker.bindTooltip(`${grupo.ciudad} · ${n} cliente${n>1?'s':''}`, { direction:'top', offset:[0,-size/2] });
+   }catch(e){
+     console.error('No se pudo dibujar el grupo de clientes en', grupo.ciudad, e);
+   }
   });
 
   pendientesActuales.sort((a,b) => (a.actividad.FechaSeguimiento||'').toString().localeCompare((b.actividad.FechaSeguimiento||'').toString()));
@@ -1800,8 +1811,8 @@ function renderVentas(){
     return ventas.filter(v => {
       const [ano, linProd, tipoArt, proveedor] = v;
       if(ventaLineasSeleccionadas.size && !ventaLineasSeleccionadas.has(linProd)) return false;
-      if(state.proveedorFiltro && !proveedor.toLowerCase().includes(state.proveedorFiltro.toLowerCase())) return false;
-      if(state.tipoArticuloFiltro && !tipoArt.toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase())) return false;
+      if(state.proveedorFiltro && !(proveedor||'').toString().toLowerCase().includes(state.proveedorFiltro.toLowerCase())) return false;
+      if(state.tipoArticuloFiltro && !(tipoArt||'').toString().toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase())) return false;
       return true;
     });
   }
@@ -1898,29 +1909,47 @@ async function cargarActividades(){
     });
     const data = await res.json();
     if(data.ok){
-      actividades = (data.actividades || []).map(a => ({ ...a, LineaProducto: normLP(a.LineaProducto) }));
-      rebuildActividadesIndex();
-      potencial = (data.potencial || []).map(p => ({ ...p, LineaProducto: normLP(p.LineaProducto) }));
-      rebuildPotencialIndex();
-      // si el Sheet ya tiene datos de venta cargados, esos mandan sobre los datos embebidos iniciales
-      if(data.ventas && data.ventas.length){
-        VENTAS_RAW = ventasSheetRowsToRaw(data.ventas);
-      }
-      // idem para clientes: si ya se subió una actualización, manda sobre la lista embebida inicial
-      if(data.clientesData && data.clientesData.length){
-        const rawClientes = data.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
-        clientes = clientesRawToObjects(rawClientes);
-        rebuildClienteIndex();
-      }
-      periodoVentas = data.periodoVentas || '';
-      actualizarLabelsPeriodo();
-      buildCanalChips();
+      try{
+        actividades = (data.actividades || []).map(a => ({ ...a, LineaProducto: normLP(a.LineaProducto) }));
+        rebuildActividadesIndex();
+      }catch(e){ console.error('Error procesando actividades', e); }
+
+      try{
+        potencial = (data.potencial || []).map(p => ({ ...p, LineaProducto: normLP(p.LineaProducto) }));
+        rebuildPotencialIndex();
+      }catch(e){ console.error('Error procesando potencial', e); }
+
+      try{
+        // si el Sheet ya tiene datos de venta cargados, esos mandan sobre los datos embebidos iniciales
+        if(data.ventas && data.ventas.length){
+          VENTAS_RAW = ventasSheetRowsToRaw(data.ventas);
+        }
+      }catch(e){ console.error('Error procesando ventas', e); }
+
+      try{
+        // idem para clientes: si ya se subió una actualización, manda sobre la lista embebida inicial
+        if(data.clientesData && data.clientesData.length){
+          const rawClientes = data.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
+          clientes = clientesRawToObjects(rawClientes);
+          rebuildClienteIndex();
+        }
+      }catch(e){ console.error('Error procesando clientes', e); }
+
+      try{
+        periodoVentas = data.periodoVentas || '';
+        actualizarLabelsPeriodo();
+      }catch(e){ console.error('Error procesando período de venta', e); }
+
+      try{ buildCanalChips(); }catch(e){ console.error('Error construyendo chips de canal', e); }
     }
   }catch(err){
     console.error('No se pudo cargar datos desde Google Sheet', err);
   }
-  recomputeVentaTotals();
-  refresh();
+
+  // Estas tres llamadas SIEMPRE deben ejecutarse, pase lo que pase arriba —
+  // así un solo dato corrupto nunca puede dejar el mapa o los filtros vacíos.
+  try{ recomputeVentaTotals(); }catch(e){ console.error('Error recalculando totales de venta', e); try{ buildDatalistsVentas(); }catch(e2){} }
+  try{ refresh(); }catch(e){ console.error('Error al dibujar el mapa', e); }
   refrescarTamanoMapa();
 }
 
