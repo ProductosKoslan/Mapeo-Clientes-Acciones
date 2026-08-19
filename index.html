@@ -140,6 +140,7 @@
   .chip.active[data-lp="04"]{ background:var(--lp-04); border-color:var(--lp-04); }
   .chip.active[data-lp="05"]{ background:var(--lp-05); border-color:var(--lp-05); }
   .chip.active[data-lp="07"]{ background:var(--lp-07); border-color:var(--lp-07); }
+  .chip.active[data-lp="08"]{ background:var(--lp-08); border-color:var(--lp-08); }
 
   .date-range{ display:flex; align-items:center; gap:5px; min-width:0; }
   .date-range input[type=date]{
@@ -623,6 +624,10 @@
 
     <div class="actlinea-filters">
       <div class="filter-group">
+        <label>Canal de venta</label>
+        <div class="chip-select" id="actlinea-filter-canal"></div>
+      </div>
+      <div class="filter-group">
         <label>Línea de producto</label>
         <div class="chip-select" id="actlinea-filter-linea"></div>
       </div>
@@ -810,9 +815,9 @@
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwVqdYqJ6jtHM7SPJ_m74rpEV-AUqc9l787OEuB_1ncudTTWIM8cNfOWB2XtqbAwb47/exec";
 
 const LINEA_PRODUCTO = {
-  "01": "Bomba", "02": "M&H", "03": "F&D", "04": "I&C", "05": "Riego", "07": "Válvulas", "08": "Otros"
+  "01": "Bomba", "02": "M&H", "03": "F&D", "04": "I&C", "05": "Riego", "07": "Válvulas", "08": "Climatización"
 };
-const LINEA_ORDER = ["01","02","03","04","05","07"];
+const LINEA_ORDER = ["01","02","03","04","05","07","08"];
 
 const CANAL_MAP = {
   "Koslan Distribución": "Distribución",
@@ -2262,7 +2267,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
    MENÚ: ACTIVIDADES POR LÍNEA DE PRODUCTO
    ========================================================= */
 const actlineaOverlay = document.getElementById('actlinea-overlay');
-const actlineaState = { lineas: new Set(), tipos: new Set(), soloVencidas: false };
+const actlineaState = { lineas: new Set(), tipos: new Set(), canales: new Set(), soloVencidas: false };
 let actlineaSortState = { campo: 'FechaSeguimiento', dir: 'desc' };
 document.querySelectorAll('#actlinea-table th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
@@ -2272,6 +2277,23 @@ document.querySelectorAll('#actlinea-table th[data-sort]').forEach(th => {
     renderActlinea();
   });
 });
+
+const actlineaFilterCanalEl = document.getElementById('actlinea-filter-canal');
+function buildActlineaCanalChips(){
+  const canalesDisponibles = [...new Set(clientes.map(c => c.canal))].sort((a,b)=>a.localeCompare(b));
+  actlineaFilterCanalEl.innerHTML = '';
+  canalesDisponibles.forEach(canal => {
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (actlineaState.canales.has(canal) ? ' active' : '');
+    chip.textContent = canal;
+    chip.addEventListener('click', () => {
+      if(actlineaState.canales.has(canal)){ actlineaState.canales.delete(canal); chip.classList.remove('active'); }
+      else { actlineaState.canales.add(canal); chip.classList.add('active'); }
+      renderActlinea();
+    });
+    actlineaFilterCanalEl.appendChild(chip);
+  });
+}
 
 const actlineaFilterLineaEl = document.getElementById('actlinea-filter-linea');
 LINEA_ORDER.forEach(code => {
@@ -2303,6 +2325,7 @@ TIPOS_ACTIVIDAD.forEach(tipo => {
 
 document.getElementById('btn-abrir-actlinea').addEventListener('click', () => {
   actlineaOverlay.classList.add('open');
+  buildActlineaCanalChips();
   renderActlinea();
 });
 document.getElementById('actlinea-close').addEventListener('click', () => actlineaOverlay.classList.remove('open'));
@@ -2368,6 +2391,10 @@ function renderActlinea(){
     if(actlineaState.lineas.size && !actlineaState.lineas.has(lp)) return false;
     if(actlineaState.tipos.size && !actlineaState.tipos.has(tipo)) return false;
     if(actlineaState.soloVencidas && !esVencida(a)) return false;
+    if(actlineaState.canales.size){
+      const c = clienteByNombre[a.Cliente];
+      if(!c || !actlineaState.canales.has(c.canal)) return false;
+    }
     return true;
   });
 
