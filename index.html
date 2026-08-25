@@ -443,9 +443,11 @@
   .hist-actions button.del-btn{ color:var(--ink-faint); }
   .hist-actions button.del-btn:hover{ color:var(--red); }
   .tag-done{ background:var(--teal-soft); color:var(--teal-dark); }
-  .tag-pot-alto{ background:#DCEEDC; color:#2E7D32; }
-  .tag-pot-medio{ background:var(--amber-soft); color:var(--amber); }
-  .tag-pot-bajo{ background:var(--surface-2); color:var(--ink-soft); }
+  .tag-pot-r1{ background:var(--surface-2); color:var(--ink-soft); }
+  .tag-pot-r2{ background:#E1EEDC; color:#4C8C3B; }
+  .tag-pot-r3{ background:var(--amber-soft); color:var(--amber); }
+  .tag-pot-r4{ background:#F3DCE6; color:#A8356C; }
+  .tag-pot-r5{ background:#DCEEDC; color:#2E7D32; }
   .hist-top{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .hist-date{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-faint); }
   .hist-desc{ font-size:13px; margin-top:4px; color:var(--ink); line-height:1.4; }
@@ -605,12 +607,14 @@
               <div class="filtros-seccion-titulo">Filtros por potencial</div>
               <div class="filtros-seccion-grid">
                 <div class="filter-group">
-                  <label>Categoría de potencial</label>
+                  <label>Venta potencial anual</label>
                   <select id="filter-potencial-categoria">
                     <option value="">Todas</option>
-                    <option value="Alto">Alto</option>
-                    <option value="Medio">Medio</option>
-                    <option value="Bajo">Bajo</option>
+                    <option value="0 - 10 MM">0 - 10 MM</option>
+                    <option value="10 - 50 MM">10 - 50 MM</option>
+                    <option value="50 - 200 MM">50 - 200 MM</option>
+                    <option value="200 - 500 MM">200 - 500 MM</option>
+                    <option value="+500 MM">+500 MM</option>
                   </select>
                 </div>
                 <div class="filter-group">
@@ -901,11 +905,13 @@
               <select id="p-linea-producto"></select>
             </div>
             <div class="field">
-              <label>Categoría de potencial</label>
+              <label>Venta potencial anual</label>
               <select id="p-categoria">
-                <option value="Alto">Alto</option>
-                <option value="Medio">Medio</option>
-                <option value="Bajo">Bajo</option>
+                <option value="0 - 10 MM">0 - 10 MM</option>
+                <option value="10 - 50 MM">10 - 50 MM</option>
+                <option value="50 - 200 MM">50 - 200 MM</option>
+                <option value="200 - 500 MM">200 - 500 MM</option>
+                <option value="+500 MM">+500 MM</option>
               </select>
             </div>
             <div class="field full">
@@ -1740,7 +1746,7 @@ function resetFormularioPotencial(){
   document.getElementById('btn-guardar-potencial').textContent = 'Registrar potencial';
   document.getElementById('btn-cancelar-edicion-potencial').style.display = 'none';
   document.getElementById('p-linea-producto').value = LINEA_ORDER[0];
-  document.getElementById('p-categoria').value = 'Alto';
+  document.getElementById('p-categoria').value = '0 - 10 MM';
   document.getElementById('p-comentario').value = '';
   document.getElementById('save-msg-potencial').textContent = '';
 }
@@ -1929,7 +1935,10 @@ document.getElementById('btn-guardar').addEventListener('click', async () => {
 /* =========================================================
    POTENCIAL DE CLIENTE
    ========================================================= */
-const CATEGORIA_TAG_CLASS = { 'Alto':'tag-pot-alto', 'Medio':'tag-pot-medio', 'Bajo':'tag-pot-bajo' };
+const CATEGORIA_TAG_CLASS = {
+  '0 - 10 MM':'tag-pot-r1', '10 - 50 MM':'tag-pot-r2', '50 - 200 MM':'tag-pot-r3',
+  '200 - 500 MM':'tag-pot-r4', '+500 MM':'tag-pot-r5'
+};
 
 function renderPotencial(){
   const list = document.getElementById('potencial-list');
@@ -1967,7 +1976,7 @@ function iniciarEdicionPotencial(id){
   document.getElementById('btn-guardar-potencial').textContent = 'Guardar cambios';
   document.getElementById('btn-cancelar-edicion-potencial').style.display = 'inline';
   document.getElementById('p-linea-producto').value = (p.LineaProducto||'').toString();
-  document.getElementById('p-categoria').value = p.Categoria || 'Alto';
+  document.getElementById('p-categoria').value = p.Categoria || '0 - 10 MM';
   document.getElementById('p-comentario').value = p.Comentario || '';
   switchTab('potencial');
 }
