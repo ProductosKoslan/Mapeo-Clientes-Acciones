@@ -97,11 +97,11 @@
   #monto-valor{ color:var(--teal-dark); font-weight:600; }
 
   /* ---------- MODAL UPLOAD VENTAS ---------- */
-  #upload-overlay, #nuevo-cliente-overlay{
-    position:fixed; inset:0; background:rgba(16,26,32,.45); z-index:2100;
+  #upload-overlay, #nuevo-cliente-overlay, #nueva-actividad-al-overlay{
+    position:fixed; inset:0; background:rgba(16,26,32,.45); z-index:2200;
     display:none; align-items:center; justify-content:center; padding:24px;
   }
-  #upload-overlay.open, #nuevo-cliente-overlay.open{ display:flex; }
+  #upload-overlay.open, #nuevo-cliente-overlay.open, #nueva-actividad-al-overlay.open{ display:flex; }
   #upload-modal, .simple-modal{
     background:var(--surface); width:min(520px, 100%); border-radius:14px; box-shadow:var(--shadow-lg);
     padding:24px; position:relative;
@@ -299,17 +299,35 @@
 
   .tabs{ display:flex; gap:2px; margin-top:16px; border-bottom:1px solid var(--line); padding:0 24px; }
 
-  /* ---------- MODAL ACTIVIDADES POR LÍNEA ---------- */
+  /* ---------- MODAL ACTIVIDADES POR LÍNEA (pantalla completa) ---------- */
   #actlinea-overlay{
-    position:fixed; inset:0; background:rgba(16,26,32,.45); z-index:2050;
-    display:none; align-items:center; justify-content:center; padding:24px;
+    position:fixed; inset:0; background:var(--bg); z-index:2050;
+    display:none; padding:0;
   }
-  #actlinea-overlay.open{ display:flex; }
+  #actlinea-overlay.open{ display:block; }
   #actlinea-modal{
-    background:var(--surface); width:min(920px, 100%); max-height:90vh; border-radius:14px;
-    box-shadow:var(--shadow-lg); padding:22px 26px 24px; overflow-y:auto; position:relative;
+    background:var(--surface); width:100%; height:100vh; max-height:100vh; border-radius:0;
+    box-shadow:none; padding:64px 28px 24px; overflow-y:auto; position:relative;
   }
-  .actlinea-filters{ display:flex; gap:22px; flex-wrap:wrap; margin-top:16px; margin-bottom:16px; }
+  /* El botón de cerrar y "volver al mapa" deben quedar SIEMPRE visibles, sin importar
+     cuánto se haya desplazado la tabla larga — por eso van con position:fixed, no absolute
+     (si fueran absolute dentro del contenedor con scroll, se irían con el desplazamiento). */
+  #actlinea-close{ position:fixed; top:18px; right:24px; z-index:2060; }
+  #btn-volver-mapa{
+    position:fixed; top:18px; left:24px; z-index:2060;
+    display:flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--surface);
+    color:var(--ink); padding:8px 14px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer;
+    box-shadow:var(--shadow); font-family:inherit;
+  }
+  #btn-volver-mapa:hover{ border-color:var(--teal); color:var(--teal-dark); }
+  .actlinea-filters{ display:flex; gap:22px; flex-wrap:wrap; margin-top:16px; margin-bottom:16px; align-items:flex-end; }
+  .actlinea-toprow{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+  .actlinea-search{ position:relative; width:280px; flex-shrink:0; }
+  .actlinea-search input{
+    width:100%; border:1px solid var(--line); border-radius:7px; padding:7px 10px 7px 30px;
+    font-size:13px; font-family:'IBM Plex Sans'; color:var(--ink); background:var(--surface-2);
+  }
+  .actlinea-search svg{ position:absolute; left:9px; top:50%; transform:translateY(-50%); opacity:.55; }
 
   .actlinea-summary{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; margin-bottom:18px; }
   .actlinea-card{
@@ -325,7 +343,7 @@
   .actlinea-card .al-row{ display:flex; justify-content:space-between; font-size:11px; color:var(--ink-soft); }
   .actlinea-card .al-row b{ font-family:'IBM Plex Mono',monospace; color:var(--ink); }
 
-  .actlinea-list{ max-height:400px; overflow-y:auto; overflow-x:auto; }
+  .actlinea-list{ overflow-y:visible; overflow-x:auto; }
   #actlinea-table tbody tr{ cursor:pointer; }
   #actlinea-table tbody tr:hover{ background:var(--surface-2); }
   #actlinea-table td.fecha-vencida{ color:var(--red); font-weight:600; }
@@ -438,6 +456,8 @@
   }
   @media (max-width:560px){
     .filtros-grid{ grid-template-columns:1fr; }
+    #btn-volver-mapa{ font-size:0; padding:8px; gap:0; }
+    #actlinea-modal{ padding-top:60px; padding-left:16px; padding-right:16px; }
   }
 </style>
 </head>
@@ -618,11 +638,24 @@
 
 <div id="actlinea-overlay">
   <div id="actlinea-modal">
+    <button id="btn-volver-mapa">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Volver al mapa
+    </button>
     <button class="modal-close" id="actlinea-close">✕</button>
-    <div class="modal-title">Actividades por línea de producto</div>
-    <div class="modal-sub">Visitas, capacitaciones y acciones registradas, agrupadas por línea</div>
+    <div class="actlinea-toprow">
+      <div>
+        <div class="modal-title">Actividades por línea de producto</div>
+        <div class="modal-sub">Visitas, capacitaciones y acciones registradas, agrupadas por línea</div>
+      </div>
+      <button class="btn-primary" id="btn-abrir-nueva-actividad-al" style="margin-top:4px;">+ Agregar actividad</button>
+    </div>
 
     <div class="actlinea-filters">
+      <div class="actlinea-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="actlinea-buscador" placeholder="Buscar en todas las columnas...">
+      </div>
       <div class="filter-group">
         <label>Canal de venta</label>
         <div class="chip-select" id="actlinea-filter-canal"></div>
@@ -656,11 +689,56 @@
           <th style="cursor:pointer;" data-sort="FechaRegistro">Fecha registro <span class="sort-arrow"></span></th>
           <th style="cursor:pointer;" data-sort="FechaSeguimiento">Fecha seguimiento <span class="sort-arrow"></span></th>
           <th>Estado</th>
+
           <th>Descripción</th>
           <th>Acciones</th>
         </tr></thead>
         <tbody id="actlinea-tbody"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div id="nueva-actividad-al-overlay">
+  <div class="simple-modal">
+    <button class="upload-close" id="nueva-actividad-al-close">✕</button>
+    <h3>Agregar actividad</h3>
+    <div class="up-sub">Elige el cliente y completa los datos de la actividad, igual que desde su ficha.</div>
+    <div class="form-grid" style="margin-bottom:14px;">
+      <div class="field full">
+        <label>Cliente</label>
+        <input type="text" id="al-nueva-cliente" list="datalist-todos-clientes" placeholder="Escribe para buscar..." autocomplete="off">
+        <datalist id="datalist-todos-clientes"></datalist>
+      </div>
+      <div class="field">
+        <label>Fecha de registro</label>
+        <input type="date" id="al-nueva-fecha-registro">
+      </div>
+      <div class="field">
+        <label>Línea de producto</label>
+        <select id="al-nueva-linea-producto"></select>
+      </div>
+      <div class="field full">
+        <label>Tipo de actividad</label>
+        <div class="tipo-toggle" id="al-nueva-tipo-toggle">
+          <button type="button" data-tipo="Visita">Visita</button>
+          <button type="button" data-tipo="Capacitación">Capacitación</button>
+          <button type="button" data-tipo="Acción">Acción</button>
+        </div>
+      </div>
+      <div class="field full">
+        <label>Descripción de registro</label>
+        <textarea id="al-nueva-descripcion" placeholder="Detalle de la visita, capacitación o acción realizada..."></textarea>
+      </div>
+      <div class="field" id="al-nueva-fecha-seguimiento-wrap">
+        <label>Fecha de seguimiento</label>
+        <input type="date" id="al-nueva-fecha-seguimiento">
+        <span style="font-size:10.5px;color:var(--ink-faint);">Solo aplica a Acción</span>
+      </div>
+    </div>
+    <div id="al-nueva-status"></div>
+    <div class="upload-actions">
+      <button class="btn-primary" id="btn-confirmar-nueva-actividad-al">Guardar actividad</button>
     </div>
   </div>
 </div>
@@ -706,7 +784,7 @@
       <div class="modal-title" id="modal-client-name">—</div>
       <div class="modal-sub"><span id="modal-client-city">—</span><span id="modal-client-canal"></span><span id="modal-client-vendedor"></span></div>
       <div class="tabs">
-        <button class="tab-btn active" data-tab="seguimiento">Seguimiento</button>
+        <button class="tab-btn active" data-tab="seguimiento">Registro</button>
         <button class="tab-btn" data-tab="potencial">Potencial</button>
         <button class="tab-btn" data-tab="ventas">Ventas (complementario)</button>
       </div>
@@ -813,6 +891,24 @@
    CONFIG
    ========================================================= */
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwVqdYqJ6jtHM7SPJ_m74rpEV-AUqc9l787OEuB_1ncudTTWIM8cNfOWB2XtqbAwb47/exec";
+
+// Google a veces devuelve un error momentáneo (por ejemplo justo tras redesplegar el
+// script), lo que hace fallar el guardado con "Unexpected token '<'" al intentar leer
+// la respuesta como JSON. Reintentamos una vez más antes de darnos por vencidos.
+async function fetchAppsScript(payload, intentos){
+  intentos = intentos || 2;
+  let ultimoError;
+  for(let i=0; i<intentos; i++){
+    try{
+      const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify(payload) });
+      return await res.json();
+    }catch(err){
+      ultimoError = err;
+      if(i < intentos-1) await new Promise(r => setTimeout(r, 600));
+    }
+  }
+  throw ultimoError;
+}
 
 const LINEA_PRODUCTO = {
   "01": "Bomba", "02": "M&H", "03": "F&D", "04": "I&C", "05": "Riego", "07": "Válvulas", "08": "Climatización"
@@ -1310,10 +1406,24 @@ function clienteTieneTipoActividad(c){
   return acts.some(a => state.tiposActividad.has(a.Tipo));
 }
 
+// Ventas de un cliente que además respetan los filtros de línea/proveedor/tipo de artículo
+// actualmente activos (usado por clienteTendencia, para que "caída/crecimiento" refleje lo
+// que se está viendo filtrado, no siempre la venta total sin filtrar).
+function ventasConFiltrosActivos(c){
+  return ventasDeCliente(c).filter(v => {
+    const linProd = v[1], tipoArt = v[2], proveedor = v[3];
+    if(state.lineas.size && !state.lineas.has(linProd)) return false;
+    if(state.proveedorFiltro && !(proveedor||'').toString().toLowerCase().includes(state.proveedorFiltro.toLowerCase())) return false;
+    if(state.tipoArticuloFiltro && !(tipoArt||'').toString().toLowerCase().includes(state.tipoArticuloFiltro.toLowerCase())) return false;
+    return true;
+  });
+}
+
 function clienteTendencia(c){
-  const anterior = ventaAnteriorByCliente[c.id] || 0;
-  const actual = ventaTotalByCliente[c.id] || 0;
-  if(anterior <= 0) return null; // sin venta el año anterior: no aplica "caída" ni "crecimiento" (sería cliente nuevo)
+  const ventas = ventasConFiltrosActivos(c);
+  const actual = ventas.filter(v=>v[0]===anoActualVentas).reduce((s,v)=>s+(v[5]||0),0);
+  const anterior = ventas.filter(v=>v[0]===anoAnteriorVentas).reduce((s,v)=>s+(v[5]||0),0);
+  if(anterior <= 0) return null; // sin venta el año anterior (con estos filtros): no aplica "caída" ni "crecimiento"
   if(actual < anterior) return 'caida';
   if(actual > anterior) return 'crecimiento';
   return 'igual';
@@ -1620,8 +1730,7 @@ function iniciarEdicionActividad(id){
 
 async function marcarActividadCompletada(id, completada){
   try{
-    const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'marcar_actividad', id, completada }) });
-    const data = await res.json();
+    const data = await fetchAppsScript({ accion:'marcar_actividad', id, completada });
     if(!data.ok) throw new Error(data.error || 'Error desconocido');
     const a = actividades.find(x => x.ID === id);
     if(a) a.Completada = completada ? 'TRUE' : 'FALSE';
@@ -1636,13 +1745,12 @@ async function marcarActividadCompletada(id, completada){
 async function eliminarActividad(id){
   if(!confirm('¿Eliminar esta actividad? Esta acción no se puede deshacer.')) return;
   try{
-    const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'eliminar_actividad', id }) });
-    const data = await res.json();
+    const data = await fetchAppsScript({ accion:'eliminar_actividad', id });
     if(!data.ok) throw new Error(data.error || 'Error desconocido');
     actividades = actividades.filter(x => x.ID !== id);
     rebuildActividadesIndex();
     if(editingActivityId === id) resetFormularioActividad();
-    renderHistorial();
+    if(currentClient) renderHistorial();
     refresh();
   }catch(err){
     console.error(err);
@@ -1673,8 +1781,7 @@ document.getElementById('btn-guardar').addEventListener('click', async () => {
   btn.disabled = true; msg.style.color='var(--ink-faint)'; msg.textContent = editingActivityId ? 'Guardando cambios...' : 'Guardando...';
   try{
     if(editingActivityId){
-      const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'editar_actividad', id: editingActivityId, ...payload }) });
-      const data = await res.json();
+      const data = await fetchAppsScript({ accion:'editar_actividad', id: editingActivityId, ...payload });
       if(!data.ok) throw new Error(data.error || 'Error desconocido');
       const a = actividades.find(x => x.ID === editingActivityId);
       if(a){
@@ -1688,8 +1795,7 @@ document.getElementById('btn-guardar').addEventListener('click', async () => {
       msg.textContent = 'Actividad actualizada ✓';
       resetFormularioActividad();
     } else {
-      const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'crear_actividad', ...payload }) });
-      const data = await res.json();
+      const data = await fetchAppsScript({ accion:'crear_actividad', ...payload });
       if(!data.ok) throw new Error(data.error || 'Error desconocido');
       actividades.push({
         ID:data.id, Cliente:payload.cliente, FechaRegistro:payload.fechaRegistro,
@@ -2267,7 +2373,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
    MENÚ: ACTIVIDADES POR LÍNEA DE PRODUCTO
    ========================================================= */
 const actlineaOverlay = document.getElementById('actlinea-overlay');
-const actlineaState = { lineas: new Set(), tipos: new Set(), canales: new Set(), soloVencidas: false };
+const actlineaState = { lineas: new Set(), tipos: new Set(), canales: new Set(), soloVencidas: false, busqueda: '' };
 let actlineaSortState = { campo: 'FechaSeguimiento', dir: 'desc' };
 document.querySelectorAll('#actlinea-table th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
@@ -2326,9 +2432,14 @@ TIPOS_ACTIVIDAD.forEach(tipo => {
 document.getElementById('btn-abrir-actlinea').addEventListener('click', () => {
   actlineaOverlay.classList.add('open');
   buildActlineaCanalChips();
+  poblarDatalistTodosClientes();
   renderActlinea();
 });
 document.getElementById('actlinea-close').addEventListener('click', () => actlineaOverlay.classList.remove('open'));
+document.getElementById('btn-volver-mapa').addEventListener('click', () => actlineaOverlay.classList.remove('open'));
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && actlineaOverlay.classList.contains('open')) actlineaOverlay.classList.remove('open');
+});
 actlineaOverlay.addEventListener('click', e => { if(e.target === actlineaOverlay) actlineaOverlay.classList.remove('open'); });
 
 document.getElementById('actlinea-chip-vencidas').addEventListener('click', function(){
@@ -2336,6 +2447,22 @@ document.getElementById('actlinea-chip-vencidas').addEventListener('click', func
   this.classList.toggle('active', actlineaState.soloVencidas);
   renderActlinea();
 });
+
+let actlineaBuscadorDebounce = null;
+document.getElementById('actlinea-buscador').addEventListener('input', e => {
+  const valor = e.target.value;
+  clearTimeout(actlineaBuscadorDebounce);
+  actlineaBuscadorDebounce = setTimeout(() => {
+    actlineaState.busqueda = valor.trim().toLowerCase();
+    renderActlinea();
+  }, 150);
+});
+
+function poblarDatalistTodosClientes(){
+  const dl = document.getElementById('datalist-todos-clientes');
+  dl.innerHTML = clientes.slice().sort((a,b)=>a.id.localeCompare(b.id))
+    .map(c => `<option value="${c.id.replace(/"/g,'&quot;')}">`).join('');
+}
 
 function renderActlinea(){
   // resumen: conteo por línea x tipo, sobre TODAS las actividades (no depende de los filtros del mapa)
@@ -2391,9 +2518,21 @@ function renderActlinea(){
     if(actlineaState.lineas.size && !actlineaState.lineas.has(lp)) return false;
     if(actlineaState.tipos.size && !actlineaState.tipos.has(tipo)) return false;
     if(actlineaState.soloVencidas && !esVencida(a)) return false;
+    const c = clienteByNombre[a.Cliente];
     if(actlineaState.canales.size){
-      const c = clienteByNombre[a.Cliente];
       if(!c || !actlineaState.canales.has(c.canal)) return false;
+    }
+    if(actlineaState.busqueda){
+      const t = today();
+      const vencidaTxt = esVencida(a) ? 'vencida' : '';
+      const estadoTxt = (a.Tipo||'').toString().trim()==='Acción' ? (esCompletada(a)?'completada':(vencidaTxt||'pendiente')) : 'registro';
+      const campos = [
+        a.Cliente, a.Tipo, LINEA_PRODUCTO[lp]||lp, c ? c.ciudad : '',
+        (a.FechaRegistro||'').toString().slice(0,10), (a.FechaSeguimiento||'').toString().slice(0,10),
+        estadoTxt, a.Descripcion
+      ];
+      const encontrado = campos.some(v => (v||'').toString().toLowerCase().includes(actlineaState.busqueda));
+      if(!encontrado) return false;
     }
     return true;
   });
@@ -2448,6 +2587,7 @@ function renderActlinea(){
         <div class="al-actions">
           <button class="al-edit-btn" data-id="${a.ID}" data-cliente="${(a.Cliente||'').replace(/"/g,'&quot;')}">Editar</button>
           ${esAccion ? `<button class="al-done-btn ${done?'is-done':''}" data-id="${a.ID}" data-done="${done}">${done ? 'Reabrir' : 'Completar'}</button>` : ''}
+          <button class="al-del-btn" data-id="${a.ID}">Eliminar</button>
         </div>
       </td>
     </tr>`;
@@ -2477,6 +2617,14 @@ function renderActlinea(){
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       await marcarActividadCompletada(btn.dataset.id, btn.dataset.done !== 'true');
+      renderActlinea();
+    });
+  });
+
+  tbody.querySelectorAll('.al-del-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await eliminarActividad(btn.dataset.id);
       renderActlinea();
     });
   });
@@ -2561,6 +2709,96 @@ document.getElementById('btn-confirmar-nuevo-cliente').addEventListener('click',
     console.error(err);
     status.className = 'err';
     status.textContent = 'No se pudo agregar: ' + err.message;
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+/* =========================================================
+   MENÚ: AGREGAR ACTIVIDAD DESDE "ACTIVIDADES POR LÍNEA"
+   Mismo formulario que en la ficha de cliente, pero primero hay que
+   elegir a qué cliente/sucursal corresponde.
+   ========================================================= */
+const nuevaActividadAlOverlay = document.getElementById('nueva-actividad-al-overlay');
+const alNuevaLineaSelect = document.getElementById('al-nueva-linea-producto');
+LINEA_ORDER.forEach(code => {
+  const opt = document.createElement('option');
+  opt.value = code; opt.textContent = LINEA_PRODUCTO[code] + ' (' + code + ')';
+  alNuevaLineaSelect.appendChild(opt);
+});
+
+let alNuevaTipoSeleccionado = 'Visita';
+document.querySelectorAll('#al-nueva-tipo-toggle button').forEach(btn => {
+  if(btn.dataset.tipo === alNuevaTipoSeleccionado) btn.classList.add('sel');
+  btn.addEventListener('click', () => {
+    alNuevaTipoSeleccionado = btn.dataset.tipo;
+    document.querySelectorAll('#al-nueva-tipo-toggle button').forEach(b=>b.classList.toggle('sel', b===btn));
+    document.getElementById('al-nueva-fecha-seguimiento-wrap').style.display = (alNuevaTipoSeleccionado === 'Acción') ? 'flex' : 'none';
+  });
+});
+
+document.getElementById('btn-abrir-nueva-actividad-al').addEventListener('click', () => {
+  document.getElementById('al-nueva-cliente').value = '';
+  document.getElementById('al-nueva-fecha-registro').value = today();
+  document.getElementById('al-nueva-fecha-seguimiento').value = '';
+  document.getElementById('al-nueva-descripcion').value = '';
+  document.getElementById('al-nueva-status').textContent = '';
+  document.getElementById('al-nueva-status').className = '';
+  alNuevaTipoSeleccionado = 'Visita';
+  document.querySelectorAll('#al-nueva-tipo-toggle button').forEach(b=>b.classList.toggle('sel', b.dataset.tipo==='Visita'));
+  document.getElementById('al-nueva-fecha-seguimiento-wrap').style.display = 'none';
+  poblarDatalistTodosClientes();
+  nuevaActividadAlOverlay.classList.add('open');
+});
+document.getElementById('nueva-actividad-al-close').addEventListener('click', () => nuevaActividadAlOverlay.classList.remove('open'));
+nuevaActividadAlOverlay.addEventListener('click', e => { if(e.target === nuevaActividadAlOverlay) nuevaActividadAlOverlay.classList.remove('open'); });
+
+document.getElementById('btn-confirmar-nueva-actividad-al').addEventListener('click', async () => {
+  const clienteTexto = document.getElementById('al-nueva-cliente').value.trim();
+  const fechaRegistro = document.getElementById('al-nueva-fecha-registro').value;
+  const lineaProducto = alNuevaLineaSelect.value;
+  const descripcion = document.getElementById('al-nueva-descripcion').value.trim();
+  const fechaSeguimiento = alNuevaTipoSeleccionado === 'Acción' ? document.getElementById('al-nueva-fecha-seguimiento').value : '';
+  const status = document.getElementById('al-nueva-status');
+  const btn = document.getElementById('btn-confirmar-nueva-actividad-al');
+
+  const cliente = clienteByNombre[clienteTexto];
+  if(!cliente){
+    status.className = 'err';
+    status.textContent = 'Elige un cliente de la lista de sugerencias.';
+    return;
+  }
+  if(!fechaRegistro || !descripcion){
+    status.className = 'err';
+    status.textContent = 'Completa fecha de registro y descripción.';
+    return;
+  }
+
+  const payload = {
+    cliente: cliente.id, fechaRegistro, lineaProducto, tipo: alNuevaTipoSeleccionado, descripcion, fechaSeguimiento,
+    canalVenta: cliente.canal
+  };
+
+  btn.disabled = true; status.className = 'busy'; status.textContent = 'Guardando...';
+  try{
+    const data = await fetchAppsScript({ accion:'crear_actividad', ...payload });
+    if(!data.ok) throw new Error(data.error || 'Error desconocido');
+    actividades.push({
+      ID:data.id, Cliente:payload.cliente, FechaRegistro:payload.fechaRegistro,
+      LineaProducto:payload.lineaProducto, Tipo:payload.tipo, Descripcion:payload.descripcion,
+      FechaSeguimiento:payload.fechaSeguimiento, CanalVenta:payload.canalVenta, FechaCreacion:data.fechaCreacion,
+      Completada:'FALSE'
+    });
+    rebuildActividadesIndex();
+    refresh();
+    renderActlinea();
+    status.className = 'ok';
+    status.textContent = 'Actividad guardada ✓';
+    setTimeout(() => nuevaActividadAlOverlay.classList.remove('open'), 900);
+  }catch(err){
+    console.error(err);
+    status.className = 'err';
+    status.textContent = 'No se pudo guardar: ' + err.message;
   }finally{
     btn.disabled = false;
   }
