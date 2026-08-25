@@ -194,6 +194,34 @@
   .filter-group.fg-wide{ grid-column:span 2; min-width:0; }
   .filtros-panel-footer{ display:flex; justify-content:flex-end; margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
 
+  .filtros-secciones{ display:flex; flex-direction:column; gap:16px; }
+  .filtros-seccion{ border:1px solid var(--line); border-radius:10px; padding:12px 14px; background:var(--surface-2); }
+  .filtros-seccion-titulo{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--teal-dark); margin-bottom:10px; }
+  .filtros-seccion-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:12px 16px; }
+
+  /* ---------- multi-select desplegable (ahorra espacio vs. chips sueltos) ---------- */
+  .msdd{ position:relative; }
+  .msdd-btn{
+    width:100%; text-align:left; display:flex; align-items:center; justify-content:space-between;
+    border:1px solid var(--line); border-radius:7px; padding:6px 9px; font-size:12.5px;
+    font-family:'IBM Plex Sans'; color:var(--ink); background:var(--surface); cursor:pointer;
+  }
+  .msdd-btn:hover{ border-color:var(--teal); }
+  .msdd-btn.tiene-seleccion{ border-color:var(--teal); color:var(--teal-dark); font-weight:600; background:var(--teal-soft); }
+  .msdd-btn .msdd-arrow{ opacity:.6; font-size:9px; margin-left:6px; flex-shrink:0; }
+  .msdd-panel{
+    display:none; position:absolute; top:calc(100% + 4px); left:0; min-width:100%; width:max-content; max-width:280px;
+    background:var(--surface); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow-lg);
+    padding:6px; z-index:1400; max-height:220px; overflow-y:auto;
+  }
+  .msdd-panel.open{ display:block; }
+  .msdd-row{
+    display:flex; align-items:center; gap:7px; padding:5px 6px; border-radius:6px; cursor:pointer;
+    font-size:12.5px; color:var(--ink-soft); white-space:nowrap;
+  }
+  .msdd-row:hover{ background:var(--surface-2); }
+  .msdd-row input{ margin:0; flex-shrink:0; }
+
   .kpi-strip{ display:flex; gap:16px; align-items:center; margin-left:auto; padding-left:14px; border-left:1px solid var(--line); flex-shrink:0; }
   .kpi{ text-align:right; position:relative; }
   .kpi .num{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:16px; line-height:1; }
@@ -450,12 +478,14 @@
     .filtros-wrap{ order:2; }
     .kpi-strip{ order:3; margin-left:auto; padding-left:0; border-left:none; }
     .filtros-grid{ grid-template-columns:1fr 1fr; }
+    .filtros-seccion-grid{ grid-template-columns:1fr 1fr; }
     #drawer{ width:100%; right:-100%; }
     .form-grid{ grid-template-columns:1fr; }
     .pendientes-popover{ right:-8px; width:min(320px, 88vw); }
   }
   @media (max-width:560px){
     .filtros-grid{ grid-template-columns:1fr; }
+    .filtros-seccion-grid{ grid-template-columns:1fr; }
     #btn-volver-mapa{ font-size:0; padding:8px; gap:0; }
     #actlinea-modal{ padding-top:60px; padding-left:16px; padding-right:16px; }
   }
@@ -499,70 +529,101 @@
         </button>
 
         <div class="filtros-panel" id="filtros-panel">
-          <div class="filtros-grid">
-            <div class="filter-group">
-              <label>Canal de venta</label>
-              <div class="chip-select" id="filter-canal"></div>
-            </div>
-            <div class="filter-group">
-              <label>Línea de producto</label>
-              <div class="chip-select" id="filter-linea"></div>
-            </div>
-            <div class="filter-group fg-wide">
-              <label>Fecha de seguimiento</label>
-              <div class="date-range">
-                <input type="date" id="fecha-desde">
-                <span>—</span>
-                <input type="date" id="fecha-hasta">
+          <div class="filtros-secciones">
+
+            <div class="filtros-seccion">
+              <div class="filtros-seccion-titulo">Filtros por venta</div>
+              <div class="filtros-seccion-grid">
+                <div class="filter-group">
+                  <label>Canal de venta</label>
+                  <div id="dd-canal-venta"></div>
+                </div>
+                <div class="filter-group">
+                  <label>Línea de producto</label>
+                  <div id="dd-linea-venta"></div>
+                </div>
+                <div class="filter-group">
+                  <label>Proveedor</label>
+                  <input type="text" id="filter-proveedor" list="datalist-proveedor" placeholder="Todos" autocomplete="off">
+                  <datalist id="datalist-proveedor"></datalist>
+                </div>
+                <div class="filter-group">
+                  <label>Tipo de artículo</label>
+                  <input type="text" id="filter-tipo-articulo" list="datalist-tipo-articulo" placeholder="Todos" autocomplete="off">
+                  <datalist id="datalist-tipo-articulo"></datalist>
+                </div>
+                <div class="filter-group">
+                  <label><span id="tendencia-label">Tendencia de venta</span></label>
+                  <select id="filter-tendencia">
+                    <option value="">Todos</option>
+                    <option value="caida">Cliente en caída</option>
+                    <option value="crecimiento">Cliente en crecimiento</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label><span id="monto-valor-label">Venta mínima</span> <span id="monto-valor" class="mono">$0</span></label>
+                  <input type="range" id="filter-monto" min="0" max="200000000" step="1000000" value="0">
+                </div>
               </div>
             </div>
-            <div class="filter-group">
-              <label><span id="monto-valor-label">Venta mínima</span> <span id="monto-valor" class="mono">$0</span></label>
-              <input type="range" id="filter-monto" min="0" max="1000000" step="10000" value="0">
+
+            <div class="filtros-seccion">
+              <div class="filtros-seccion-titulo">Filtros por actividad registrada</div>
+              <div class="filtros-seccion-grid">
+                <div class="filter-group">
+                  <label>Cliente con actividad</label>
+                  <select id="filter-actividad">
+                    <option value="">Todos</option>
+                    <option value="con">Con actividad registrada</option>
+                    <option value="sin">Sin actividad registrada</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label>Tipo de actividad</label>
+                  <div id="dd-tipo-actividad"></div>
+                </div>
+                <div class="filter-group">
+                  <label>Canal de venta</label>
+                  <div id="dd-canal-actividad"></div>
+                </div>
+                <div class="filter-group">
+                  <label>Actividad registrada por línea</label>
+                  <div id="dd-linea-actividad"></div>
+                </div>
+                <div class="filter-group fg-wide">
+                  <label>Fecha de seguimiento</label>
+                  <div class="date-range">
+                    <input type="date" id="fecha-desde">
+                    <span>—</span>
+                    <input type="date" id="fecha-hasta">
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="filter-group">
-              <label>Cliente con actividad</label>
-              <select id="filter-actividad">
-                <option value="">Todos</option>
-                <option value="con">Con actividad registrada</option>
-                <option value="sin">Sin actividad registrada</option>
-              </select>
+
+            <div class="filtros-seccion">
+              <div class="filtros-seccion-titulo">Filtros por potencial</div>
+              <div class="filtros-seccion-grid">
+                <div class="filter-group">
+                  <label>Categoría de potencial</label>
+                  <select id="filter-potencial-categoria">
+                    <option value="">Todas</option>
+                    <option value="Alto">Alto</option>
+                    <option value="Medio">Medio</option>
+                    <option value="Bajo">Bajo</option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label>Potencial en línea</label>
+                  <div id="dd-linea-potencial"></div>
+                </div>
+                <div class="filter-group">
+                  <label>Canal de venta</label>
+                  <div id="dd-canal-potencial"></div>
+                </div>
+              </div>
             </div>
-            <div class="filter-group">
-              <label>Tipo de actividad</label>
-              <div class="chip-select" id="filter-tipo-actividad"></div>
-            </div>
-            <div class="filter-group">
-              <label><span id="tendencia-label">Tendencia de venta</span></label>
-              <select id="filter-tendencia">
-                <option value="">Todos</option>
-                <option value="caida">Cliente en caída</option>
-                <option value="crecimiento">Cliente en crecimiento</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label>Potencial en línea</label>
-              <div class="chip-select" id="filter-potencial-linea"></div>
-            </div>
-            <div class="filter-group">
-              <label>Categoría de potencial</label>
-              <select id="filter-potencial-categoria">
-                <option value="">Todas</option>
-                <option value="Alto">Alto</option>
-                <option value="Medio">Medio</option>
-                <option value="Bajo">Bajo</option>
-              </select>
-            </div>
-            <div class="filter-group">
-              <label>Proveedor</label>
-              <input type="text" id="filter-proveedor" list="datalist-proveedor" placeholder="Todos" autocomplete="off">
-              <datalist id="datalist-proveedor"></datalist>
-            </div>
-            <div class="filter-group">
-              <label>Tipo de artículo</label>
-              <input type="text" id="filter-tipo-articulo" list="datalist-tipo-articulo" placeholder="Todos" autocomplete="off">
-              <datalist id="datalist-tipo-articulo"></datalist>
-            </div>
+
           </div>
           <div class="filtros-panel-footer">
             <button class="btn-clear" id="btn-clear-filters">Limpiar filtros</button>
@@ -1084,17 +1145,14 @@ function recomputeVentaTotals(){
 
 function configurarSliderMonto(){
   const slider = document.getElementById('filter-monto');
-  // techo "lindo": redondeamos hacia arriba a una escala legible según la magnitud
-  let max = ventaMaxGlobal;
-  if(max <= 0){ max = 1000000; }
-  const magnitud = Math.pow(10, Math.max(3, Math.floor(Math.log10(max)) - 1));
-  max = Math.ceil(max / magnitud) * magnitud;
-  const step = Math.max(1000, Math.round(magnitud / 10));
+  // Techo fijo en $200.000.000 (en vez de calcularlo según la venta más alta) — la última
+  // posición del slider representa "$200.000.000+".
+  const max = 200000000;
+  const step = 1000000;
   slider.min = 0;
   slider.max = max;
   slider.step = step;
-  // si el valor actual ya no tiene sentido con la nueva escala, lo ajustamos
-  if(state.montoMinimo > max){ state.montoMinimo = 0; }
+  if(state.montoMinimo > max){ state.montoMinimo = max; }
   slider.value = state.montoMinimo;
   document.getElementById('monto-valor-label').textContent = 'Venta mínima' + (anoActualVentas ? (' ' + anoActualVentas) : '');
   document.getElementById('monto-valor').textContent = '$' + state.montoMinimo.toLocaleString('es-CL') + (state.montoMinimo>=max ? ' (máx)' : '+');
@@ -1120,7 +1178,8 @@ const state = {
   tiposActividad: new Set(),   // vacío = todos ("Visita" | "Capacitación" | "Acción")
   tendencia: "",                // "" | "caida" | "crecimiento"
   proveedorFiltro: "",
-  tipoArticuloFiltro: ""
+  tipoArticuloFiltro: "",
+  lineasActividad: new Set()   // vacío = todas — exige que la ACTIVIDAD (no la venta) sea de esa línea
 };
 
 /* =========================================================
@@ -1147,24 +1206,86 @@ let markerLayer = L.layerGroup().addTo(map);
 let cityMarkers = {}; // key "lat,lon" -> marker
 
 /* =========================================================
-   BUILD FILTER CHIPS
+   COMPONENTE: LISTA DESPLEGABLE DE SELECCIÓN MÚLTIPLE
+   (reemplaza los chips sueltos para ahorrar espacio en el panel de filtros)
    ========================================================= */
-const filterCanalEl = document.getElementById('filter-canal');
-function buildCanalChips(){
-  const canales = [...new Set(clientes.map(c => c.canal))].sort((a,b)=>a.localeCompare(b));
-  filterCanalEl.innerHTML = '';
-  canales.forEach(c => {
-    const chip = document.createElement('div');
-    chip.className = 'chip' + (state.canales.has(c) ? ' active' : '');
-    chip.textContent = c;
-    chip.dataset.canal = c;
-    chip.addEventListener('click', () => {
-      if(state.canales.has(c)){ state.canales.delete(c); chip.classList.remove('active'); }
-      else { state.canales.add(c); chip.classList.add('active'); }
+const msddGroups = {}; // agrupa instancias que comparten el mismo Set de estado (ej: Canal aparece en 3 secciones)
+function registrarMsddRefresh(groupKey, fn){
+  if(!msddGroups[groupKey]) msddGroups[groupKey] = [];
+  msddGroups[groupKey].push(fn);
+}
+function refrescarMsddGroup(groupKey){
+  (msddGroups[groupKey]||[]).forEach(fn => fn());
+}
+function refrescarTodosLosMsdd(){
+  Object.keys(msddGroups).forEach(refrescarMsddGroup);
+}
+
+document.addEventListener('click', () => {
+  document.querySelectorAll('.msdd-panel.open').forEach(p => p.classList.remove('open'));
+});
+
+// opciones: [{value, label}]; estadoSet: instancia de Set compartida; groupKey: string para
+// sincronizar varias instancias del mismo filtro (ej. Canal de venta repetido en 3 secciones).
+function crearMultiSelectDropdown(containerEl, opciones, estadoSet, groupKey, placeholder){
+  containerEl.innerHTML = '';
+  containerEl.classList.add('msdd');
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msdd-btn';
+  btn.innerHTML = '<span class="msdd-label"></span><span class="msdd-arrow">▼</span>';
+  const panel = document.createElement('div');
+  panel.className = 'msdd-panel';
+
+  opciones.forEach(opt => {
+    const row = document.createElement('label');
+    row.className = 'msdd-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = estadoSet.has(opt.value);
+    cb.addEventListener('change', () => {
+      if(cb.checked) estadoSet.add(opt.value); else estadoSet.delete(opt.value);
+      refrescarMsddGroup(groupKey);
       refresh();
     });
-    filterCanalEl.appendChild(chip);
+    row.appendChild(cb);
+    row.appendChild(document.createTextNode(' ' + opt.label));
+    panel.appendChild(row);
   });
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const yaAbierto = panel.classList.contains('open');
+    document.querySelectorAll('.msdd-panel.open').forEach(p => p.classList.remove('open'));
+    if(!yaAbierto) panel.classList.add('open');
+  });
+  panel.addEventListener('click', e => e.stopPropagation());
+
+  containerEl.appendChild(btn);
+  containerEl.appendChild(panel);
+
+  function selfRefresh(){
+    panel.querySelectorAll('input[type=checkbox]').forEach((cb,i) => { cb.checked = estadoSet.has(opciones[i].value); });
+    const n = estadoSet.size;
+    btn.querySelector('.msdd-label').textContent = n === 0 ? (placeholder||'Todos') : (n + ' seleccionad' + (n===1?'a':'as'));
+    btn.classList.toggle('tiene-seleccion', n > 0);
+  }
+  registrarMsddRefresh(groupKey, selfRefresh);
+  selfRefresh();
+}
+
+/* =========================================================
+   BUILD FILTER DROPDOWNS
+   ========================================================= */
+function opcionesLinea(){ return LINEA_ORDER.map(code => ({ value: code, label: LINEA_PRODUCTO[code] + ' ('+code+')' })); }
+
+function buildCanalDropdowns(){
+  msddGroups['canal'] = []; // se reconstruye desde cero cada vez, para no acumular instancias viejas
+  const canales = [...new Set(clientes.map(c => c.canal))].sort((a,b)=>a.localeCompare(b));
+  const opciones = canales.map(c => ({ value:c, label:c }));
+  crearMultiSelectDropdown(document.getElementById('dd-canal-venta'), opciones, state.canales, 'canal', 'Todos');
+  crearMultiSelectDropdown(document.getElementById('dd-canal-actividad'), opciones, state.canales, 'canal', 'Todos');
+  crearMultiSelectDropdown(document.getElementById('dd-canal-potencial'), opciones, state.canales, 'canal', 'Todos');
   buildLegend();
 }
 function buildLegend(){
@@ -1173,21 +1294,14 @@ function buildLegend(){
   const canales = [...new Set(clientes.map(c => c.canal))].sort((a,b)=>a.localeCompare(b));
   el.innerHTML = canales.map(c => `<div class="lg-row"><span class="lg-dot" style="background:${colorCanal(c)}"></span> ${c}</div>`).join('');
 }
-buildCanalChips();
+buildCanalDropdowns();
 
-const filterLineaEl = document.getElementById('filter-linea');
-LINEA_ORDER.forEach(code => {
-  const chip = document.createElement('div');
-  chip.className = 'chip';
-  chip.textContent = LINEA_PRODUCTO[code] + ' ('+code+')';
-  chip.dataset.lp = code;
-  chip.addEventListener('click', () => {
-    if(state.lineas.has(code)){ state.lineas.delete(code); chip.classList.remove('active'); }
-    else { state.lineas.add(code); chip.classList.add('active'); }
-    refresh();
-  });
-  filterLineaEl.appendChild(chip);
-});
+crearMultiSelectDropdown(document.getElementById('dd-linea-venta'), opcionesLinea(), state.lineas, 'linea-venta', 'Todas');
+crearMultiSelectDropdown(document.getElementById('dd-linea-actividad'), opcionesLinea(), state.lineasActividad, 'linea-actividad', 'Todas');
+crearMultiSelectDropdown(document.getElementById('dd-linea-potencial'), opcionesLinea(), state.potencialLineas, 'linea-potencial', 'Todas');
+
+const TIPOS_ACTIVIDAD = ["Visita", "Capacitación", "Acción"];
+crearMultiSelectDropdown(document.getElementById('dd-tipo-actividad'), TIPOS_ACTIVIDAD.map(t=>({value:t,label:t})), state.tiposActividad, 'tipo-actividad', 'Todos');
 
 document.getElementById('fecha-desde').addEventListener('change', e => { state.fechaDesde = e.target.value || null; refresh(); });
 document.getElementById('fecha-hasta').addEventListener('change', e => { state.fechaHasta = e.target.value || null; refresh(); });
@@ -1201,21 +1315,6 @@ document.getElementById('filter-monto').addEventListener('input', e => {
   montoDebounce = setTimeout(refresh, 90);
 });
 document.getElementById('filter-actividad').addEventListener('change', e => { state.actividadFiltro = e.target.value; refresh(); });
-
-const TIPOS_ACTIVIDAD = ["Visita", "Capacitación", "Acción"];
-const filterTipoActividadEl = document.getElementById('filter-tipo-actividad');
-TIPOS_ACTIVIDAD.forEach(tipo => {
-  const chip = document.createElement('div');
-  chip.className = 'chip';
-  chip.textContent = tipo;
-  chip.dataset.tipoAct = tipo;
-  chip.addEventListener('click', () => {
-    if(state.tiposActividad.has(tipo)){ state.tiposActividad.delete(tipo); chip.classList.remove('active'); }
-    else { state.tiposActividad.add(tipo); chip.classList.add('active'); }
-    refresh();
-  });
-  filterTipoActividadEl.appendChild(chip);
-});
 
 document.getElementById('filter-tendencia').addEventListener('change', e => { state.tendencia = e.target.value; refresh(); });
 
@@ -1238,19 +1337,6 @@ function buildDatalistsVentas(){
   dlTipo.innerHTML = [...tiposArt].sort().map(t => `<option value="${t.replace(/"/g,'&quot;')}">`).join('');
 }
 
-const filterPotencialLineaEl = document.getElementById('filter-potencial-linea');
-LINEA_ORDER.forEach(code => {
-  const chip = document.createElement('div');
-  chip.className = 'chip';
-  chip.textContent = LINEA_PRODUCTO[code] + ' ('+code+')';
-  chip.dataset.lp = code;
-  chip.addEventListener('click', () => {
-    if(state.potencialLineas.has(code)){ state.potencialLineas.delete(code); chip.classList.remove('active'); }
-    else { state.potencialLineas.add(code); chip.classList.add('active'); }
-    refresh();
-  });
-  filterPotencialLineaEl.appendChild(chip);
-});
 document.getElementById('filter-potencial-categoria').addEventListener('change', e => { state.potencialCategoria = e.target.value; refresh(); });
 
 document.getElementById('btn-clear-filters').addEventListener('click', () => {
@@ -1260,6 +1346,7 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   state.tiposActividad.clear();
   state.tendencia = "";
   state.proveedorFiltro = ""; state.tipoArticuloFiltro = "";
+  state.lineasActividad.clear();
   document.querySelectorAll('.chip.active').forEach(c => c.classList.remove('active'));
   document.getElementById('fecha-desde').value = "";
   document.getElementById('fecha-hasta').value = "";
@@ -1271,6 +1358,7 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   document.getElementById('filter-tendencia').value = "";
   document.getElementById('filter-proveedor').value = "";
   document.getElementById('filter-tipo-articulo').value = "";
+  refrescarTodosLosMsdd();
   refresh();
 });
 
@@ -1359,6 +1447,7 @@ function updateFiltrosBadge(){
   if(state.tendencia) n++;
   if(state.proveedorFiltro) n++;
   if(state.tipoArticuloFiltro) n++;
+  n += state.lineasActividad.size;
   const badge = document.getElementById('filtros-badge');
   if(n > 0){ badge.style.display='flex'; badge.textContent = n; }
   else { badge.style.display='none'; }
@@ -1406,6 +1495,14 @@ function clienteTieneTipoActividad(c){
   return acts.some(a => state.tiposActividad.has(a.Tipo));
 }
 
+// A diferencia de clienteTieneLinea (que da por buena una coincidencia por VENTA o por
+// actividad), esta exige que la ACTIVIDAD MISMA sea de esa línea — para poder filtrar
+// "clientes con una actividad registrada en la línea X", sin que colide con clientes que
+// solo tienen venta en esa línea pero la actividad es de otra.
+function clienteTieneActividadEnLinea(c, code){
+  return actividadesDeCliente(c).some(a => (a.LineaProducto||'').toString() === code);
+}
+
 // Ventas de un cliente que además respetan los filtros de línea/proveedor/tipo de artículo
 // actualmente activos (usado por clienteTendencia, para que "caída/crecimiento" refleje lo
 // que se está viendo filtrado, no siempre la venta total sin filtrar).
@@ -1441,7 +1538,10 @@ function clientePasaFiltros(c){
     if(!clienteTieneSeguimientoEnRango(c)) return false;
   }
   if(state.montoMinimo > 0){
-    if((ventaTotalByCliente[c.id] || 0) < state.montoMinimo) return false;
+    const ventaFiltrada = ventasConFiltrosActivos(c)
+      .filter(v => v[0] === anoActualVentas)
+      .reduce((s, v) => s + (v[5] || 0), 0);
+    if(ventaFiltrada < state.montoMinimo) return false;
   }
   if(state.actividadFiltro){
     const tieneActividad = actividadesDeCliente(c).length > 0;
@@ -1450,6 +1550,11 @@ function clientePasaFiltros(c){
   }
   if(state.tiposActividad.size){
     if(!clienteTieneTipoActividad(c)) return false;
+  }
+  if(state.lineasActividad.size){
+    let ok = false;
+    for(const code of state.lineasActividad){ if(clienteTieneActividadEnLinea(c, code)){ ok = true; break; } }
+    if(!ok) return false;
   }
   if(state.tendencia){
     if(clienteTendencia(c) !== state.tendencia) return false;
@@ -2153,7 +2258,7 @@ async function cargarActividades(){
         actualizarLabelsPeriodo();
       }catch(e){ console.error('Error procesando período de venta', e); }
 
-      try{ buildCanalChips(); }catch(e){ console.error('Error construyendo chips de canal', e); }
+      try{ buildCanalDropdowns(); }catch(e){ console.error('Error construyendo chips de canal', e); }
     }
   }catch(err){
     console.error('No se pudo cargar datos desde Google Sheet', err);
@@ -2331,7 +2436,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
         clientes = clientesRawToObjects(clientesInfo.rows);
       }
       rebuildClienteIndex();
-      buildCanalChips();
+      buildCanalDropdowns();
     }
 
     if(ventasRows.length){
@@ -2696,7 +2801,7 @@ document.getElementById('btn-confirmar-nuevo-cliente').addEventListener('click',
     const nuevo = clientesRawToObjects([[nombre, ciudad, division, coords[0], coords[1], vendedor]])[0];
     clientes.push(nuevo);
     rebuildClienteIndex();
-    buildCanalChips();
+    buildCanalDropdowns();
     refresh();
 
     status.className = 'ok';
