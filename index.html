@@ -1192,9 +1192,11 @@ const state = {
    MAP INIT
    ========================================================= */
 const map = L.map('map', { zoomControl:true, minZoom:4, maxZoom:16 }).setView([-35.5, -71.5], 4.6);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; OpenStreetMap &copy; CARTO',
-  subdomains: 'abcd', maxZoom: 19
+// CARTO empezó a exigir clave de API para su capa gratuita ("light_all") — se cambió a los
+// tiles estándar de OpenStreetMap, que siguen siendo gratis y sin necesidad de registro.
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  subdomains: 'abc', maxZoom: 19
 }).addTo(map);
 
 // Leaflet a veces calcula mal el tamaño del mapa si el layout todavía no terminó de
