@@ -94,7 +94,7 @@
     width:15px; height:15px; border-radius:50%; background:var(--teal); cursor:pointer; border:2px solid #fff;
     box-shadow:0 1px 3px rgba(16,32,40,.4);
   }
-  #monto-valor{ color:var(--teal-dark); font-weight:600; }
+  #monto-valor, #monto-anterior-valor{ color:var(--teal-dark); font-weight:600; }
 
   /* ---------- MODAL UPLOAD VENTAS ---------- */
   #upload-overlay, #nuevo-cliente-overlay, #nueva-actividad-al-overlay{
@@ -565,6 +565,10 @@
                 <div class="filter-group">
                   <label><span id="monto-valor-label">Venta mínima</span> <span id="monto-valor" class="mono">$0</span></label>
                   <input type="range" id="filter-monto" min="0" max="200000000" step="1000000" value="0">
+                </div>
+                <div class="filter-group">
+                  <label><span id="monto-anterior-label">Venta mínima año anterior</span> <span id="monto-anterior-valor" class="mono">$0</span></label>
+                  <input type="range" id="filter-monto-anterior" min="0" max="200000000" step="1000000" value="0">
                 </div>
               </div>
             </div>
@@ -1162,6 +1166,12 @@ function configurarSliderMonto(){
   slider.value = state.montoMinimo;
   document.getElementById('monto-valor-label').textContent = 'Venta mínima' + (anoActualVentas ? (' ' + anoActualVentas) : '');
   document.getElementById('monto-valor').textContent = '$' + state.montoMinimo.toLocaleString('es-CL') + (state.montoMinimo>=max ? ' (máx)' : '+');
+  const sa = document.getElementById('filter-monto-anterior');
+  sa.min = 0; sa.max = max; sa.step = step;
+  if(state.montoMinimoAnterior > max){ state.montoMinimoAnterior = max; }
+  sa.value = state.montoMinimoAnterior;
+  document.getElementById('monto-anterior-label').textContent = 'Venta mínima' + (anoAnteriorVentas ? (' ' + anoAnteriorVentas) : ' año anterior');
+  document.getElementById('monto-anterior-valor').textContent = '$' + state.montoMinimoAnterior.toLocaleString('es-CL') + (state.montoMinimoAnterior>=max ? ' (máx)' : '+');
   const tendenciaLabel = document.getElementById('tendencia-label');
   if(tendenciaLabel){
     tendenciaLabel.textContent = (anoAnteriorVentas && anoActualVentas) ? `Tendencia (${anoAnteriorVentas}→${anoActualVentas})` : 'Tendencia de venta';
@@ -1178,6 +1188,7 @@ const state = {
   fechaHasta: null,
   search: "",
   montoMinimo: 0,
+  montoMinimoAnterior: 0,
   actividadFiltro: "",   // "" | "con" | "sin"
   potencialLineas: new Set(), // vacío = todas
   potencialCategoria: "",      // "" | "Alto" | "Medio" | "Bajo"
@@ -1322,6 +1333,14 @@ document.getElementById('filter-monto').addEventListener('input', e => {
   clearTimeout(montoDebounce);
   montoDebounce = setTimeout(refresh, 90);
 });
+let montoAntDebounce = null;
+document.getElementById('filter-monto-anterior').addEventListener('input', e => {
+  state.montoMinimoAnterior = Number(e.target.value) || 0;
+  const max = Number(e.target.max);
+  document.getElementById('monto-anterior-valor').textContent = '$' + state.montoMinimoAnterior.toLocaleString('es-CL') + (state.montoMinimoAnterior>=max ? ' (máx)' : '+');
+  clearTimeout(montoAntDebounce);
+  montoAntDebounce = setTimeout(refresh, 90);
+});
 document.getElementById('filter-actividad').addEventListener('change', e => { state.actividadFiltro = e.target.value; refresh(); });
 
 document.getElementById('filter-tendencia').addEventListener('change', e => { state.tendencia = e.target.value; refresh(); });
@@ -1349,7 +1368,7 @@ document.getElementById('filter-potencial-categoria').addEventListener('change',
 
 document.getElementById('btn-clear-filters').addEventListener('click', () => {
   state.canales.clear(); state.lineas.clear(); state.fechaDesde=null; state.fechaHasta=null; state.search="";
-  state.montoMinimo = 0; state.actividadFiltro = "";
+  state.montoMinimo = 0; state.montoMinimoAnterior = 0; state.actividadFiltro = "";
   state.potencialLineas.clear(); state.potencialCategoria = "";
   state.tiposActividad.clear();
   state.tendencia = "";
@@ -1361,6 +1380,8 @@ document.getElementById('btn-clear-filters').addEventListener('click', () => {
   document.getElementById('search-input').value = "";
   document.getElementById('filter-monto').value = "0";
   document.getElementById('monto-valor').textContent = '$0';
+  document.getElementById('filter-monto-anterior').value = "0";
+  document.getElementById('monto-anterior-valor').textContent = '$0';
   document.getElementById('filter-actividad').value = "";
   document.getElementById('filter-potencial-categoria').value = "";
   document.getElementById('filter-tendencia').value = "";
@@ -1448,6 +1469,7 @@ function updateFiltrosBadge(){
   let n = state.canales.size + state.lineas.size;
   if(state.fechaDesde || state.fechaHasta) n++;
   if(state.montoMinimo > 0) n++;
+  if(state.montoMinimoAnterior > 0) n++;
   if(state.actividadFiltro) n++;
   n += state.potencialLineas.size;
   if(state.potencialCategoria) n++;
@@ -1550,6 +1572,12 @@ function clientePasaFiltros(c){
       .filter(v => v[0] === anoActualVentas)
       .reduce((s, v) => s + (v[5] || 0), 0);
     if(ventaFiltrada < state.montoMinimo) return false;
+  }
+  if(state.montoMinimoAnterior > 0){
+    const ventaAnt = ventasConFiltrosActivos(c)
+      .filter(v => v[0] === anoAnteriorVentas)
+      .reduce((s, v) => s + (v[5] || 0), 0);
+    if(ventaAnt < state.montoMinimoAnterior) return false;
   }
   if(state.actividadFiltro){
     const tieneActividad = actividadesDeCliente(c).length > 0;
