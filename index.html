@@ -2451,6 +2451,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
   }
 
   let pasoUpload = '';
+  let avisoRelectura = false;
   btnConfirmarUpload.disabled = true;
   uploadStatus.className = 'busy';
   uploadStatus.textContent = 'Leyendo el archivo...';
@@ -2476,8 +2477,10 @@ btnConfirmarUpload.addEventListener('click', async () => {
       // (por ejemplo, los agregados manualmente desde "Agregar cliente"), así que volvemos
       // a leer la lista completa ya fusionada en vez de quedarnos solo con lo recién subido.
       pasoUpload = 'releer clientes';
-      const dataLeer = await fetchAppsScript({ accion:'leer' }, 3);
-      if(dataLeer.ok && dataLeer.clientesData && dataLeer.clientesData.length){
+      let dataLeer = null;
+      try{ dataLeer = await fetchAppsScript({ accion:'leer' }, 3); }
+      catch(e){ console.warn('No se pudo releer la lista fusionada; se usa la del Excel. Recarga la página para ver clientes agregados manualmente.', e); avisoRelectura = true; }
+      if(dataLeer && dataLeer.ok && dataLeer.clientesData && dataLeer.clientesData.length){
         const rawClientes = dataLeer.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
         clientes = clientesRawToObjects(rawClientes);
       } else {
@@ -2524,8 +2527,9 @@ btnConfirmarUpload.addEventListener('click', async () => {
     if(clientesInfo.rows.length) msg += ` — ${clientesInfo.rows.length.toLocaleString('es-CL')} clientes`;
     if(ventasRows.length) msg += ` — ${ventasRows.length.toLocaleString('es-CL')} registros de venta`;
     if(clientesInfo.sinCoords.length) msg += `. Nota: ${clientesInfo.sinCoords.length} ciudad(es) no reconocidas, esos clientes no aparecerán en el mapa.`;
+    if(avisoRelectura) msg += '. Aviso: recarga la página (Ctrl+F5) para ver también los clientes agregados manualmente.';
     uploadStatus.textContent = msg;
-    if(!clientesInfo.sinCoords.length) setTimeout(() => uploadOverlay.classList.remove('open'), 1800);  }catch(err){
+    if(!clientesInfo.sinCoords.length && !avisoRelectura) setTimeout(() => uploadOverlay.classList.remove('open'), 1800);  }catch(err){
     console.error(err);
     uploadStatus.className = 'err';
     uploadStatus.textContent = (err.message === 'Clave de administrador incorrecta.' ? '🔒 ' : '') + 'No se pudo actualizar (paso: ' + (pasoUpload || 'lectura del archivo') + '): ' + err.message;
