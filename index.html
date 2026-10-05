@@ -2460,8 +2460,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
 
     if(clientesInfo.rows.length){
       uploadStatus.textContent = `Enviando ${clientesInfo.rows.length.toLocaleString('es-CL')} clientes a Google Sheets...`;
-      const res1 = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'actualizar_clientes', rows: clientesInfo.rows, adminKey }) });
-      const data1 = await res1.json();
+      const data1 = await fetchAppsScript({ accion:'actualizar_clientes', rows: clientesInfo.rows, adminKey }, 3);
       if(!data1.ok) throw new Error(data1.error || 'Error desconocido al guardar clientes.');
       // El backend conserva automáticamente cualquier cliente que no venga en este Excel
       // (por ejemplo, los agregados manualmente desde "Agregar cliente"), así que volvemos
@@ -2480,9 +2479,20 @@ btnConfirmarUpload.addEventListener('click', async () => {
 
     if(ventasRows.length){
       uploadStatus.textContent = `Enviando ${ventasRows.length.toLocaleString('es-CL')} registros de venta a Google Sheets...`;
-      const res2 = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'actualizar_ventas', rows: ventasRows, adminKey }) });
-      const data2 = await res2.json();
-      if(!data2.ok) throw new Error(data2.error || 'Error desconocido al guardar ventas.');
+      // Se envía por tandas: mandar todo de una vez hace que Google responda con una
+      // página de error HTML (por tamaño o tiempo) y falle con "Unexpected token '<'".
+      const TANDA = 4000;
+      const totalTandas = Math.ceil(ventasRows.length / TANDA);
+      for(let t=0; t<totalTandas; t++){
+        uploadStatus.textContent = `Enviando ventas a Google Sheets... tanda ${t+1} de ${totalTandas}`;
+        const data2 = await fetchAppsScript({
+          accion:'actualizar_ventas',
+          rows: ventasRows.slice(t*TANDA, (t+1)*TANDA),
+          reset: t === 0,
+          adminKey
+        }, 3);
+        if(!data2.ok) throw new Error(data2.error || 'Error desconocido al guardar ventas.');
+      }
       VENTAS_RAW = ventasSheetRowsToRaw(ventasRows);
     }
 
