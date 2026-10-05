@@ -97,11 +97,15 @@
   #monto-valor, #monto-anterior-valor{ color:var(--teal-dark); font-weight:600; }
 
   /* ---------- MODAL UPLOAD VENTAS ---------- */
-  #upload-overlay, #nuevo-cliente-overlay, #nueva-actividad-al-overlay{
+  #upload-overlay, #nuevo-cliente-overlay, #nueva-actividad-al-overlay, #seguimiento-overlay{
     position:fixed; inset:0; background:rgba(16,26,32,.45); z-index:2200;
     display:none; align-items:center; justify-content:center; padding:24px;
   }
-  #upload-overlay.open, #nuevo-cliente-overlay.open, #nueva-actividad-al-overlay.open{ display:flex; }
+  #upload-overlay.open, #nuevo-cliente-overlay.open, #nueva-actividad-al-overlay.open, #seguimiento-overlay.open{ display:flex; }
+  #seguimiento-overlay{ z-index:3000; }
+  #seguimiento-texto{ width:100%; min-height:110px; resize:vertical; font:inherit; padding:10px; border:1px solid var(--line); border-radius:8px; box-sizing:border-box; }
+  .seg-resumen{ background:var(--surface-2); border-radius:8px; padding:10px 12px; font-size:12.5px; line-height:1.45; margin-bottom:12px; color:var(--ink-soft); }
+  .seg-btn{ color:var(--teal-dark) !important; font-weight:600; }
   #upload-modal, .simple-modal{
     background:var(--surface); width:min(520px, 100%); border-radius:14px; box-shadow:var(--shadow-lg);
     padding:24px; position:relative;
@@ -764,6 +768,21 @@
         </tr></thead>
         <tbody id="actlinea-tbody"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<div id="seguimiento-overlay">
+  <div class="simple-modal">
+    <button class="upload-close" id="seguimiento-close">✕</button>
+    <h3>Hacer seguimiento</h3>
+    <div class="up-sub">Escribe un comentario sobre esta acción. Se enviará por correo a los responsables de la actividad (línea de producto y vendedor del cliente).</div>
+    <div class="seg-resumen" id="seguimiento-resumen"></div>
+    <textarea id="seguimiento-texto" placeholder="Escribe tu comentario de seguimiento..."></textarea>
+    <div id="seguimiento-status" style="font-size:12.5px;margin-top:8px;min-height:18px;"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+      <button class="btn-clear" id="seguimiento-cancelar" type="button">Cancelar</button>
+      <button class="btn-primary" id="seguimiento-enviar" type="button">Enviar seguimiento</button>
     </div>
   </div>
 </div>
@@ -1866,6 +1885,7 @@ function renderHistorial(){
       <div class="hist-desc">${(a.Descripcion||'').toString()}</div>
       ${((a.Tipo||'').toString().trim() === 'Acción' && a.FechaSeguimiento && !done) ? `<div class="hist-follow">Próximo seguimiento: <strong class="mono">${a.FechaSeguimiento.toString().slice(0,10)}</strong></div>` : ''}
       <div class="hist-actions">
+        ${((a.Tipo||'').toString().trim() === 'Acción' && !done) ? `<button class="seg-btn hist-seg-btn" data-id="${a.ID}">Hacer seguimiento</button>` : ''}
         <button class="edit-btn" data-id="${a.ID}">Editar</button>
         ${(a.Tipo||'').toString().trim() === 'Acción' ? `<button class="done-btn ${done?'is-done':''}" data-id="${a.ID}" data-done="${done}">${done ? 'Reabrir' : 'Marcar como realizado'}</button>` : ''}
         <button class="del-btn" data-id="${a.ID}">Eliminar</button>
@@ -1873,6 +1893,7 @@ function renderHistorial(){
     </div>`;
   }).join('');
 
+  list.querySelectorAll('.hist-seg-btn').forEach(btn => btn.addEventListener('click', () => abrirSeguimiento(btn.dataset.id)));
   list.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', () => iniciarEdicionActividad(btn.dataset.id)));
   list.querySelectorAll('.done-btn').forEach(btn => btn.addEventListener('click', () => marcarActividadCompletada(btn.dataset.id, btn.dataset.done !== 'true')));
   list.querySelectorAll('.del-btn').forEach(btn => btn.addEventListener('click', () => eliminarActividad(btn.dataset.id)));
@@ -1895,6 +1916,43 @@ function iniciarEdicionActividad(id){
   switchTab('seguimiento');
   document.getElementById('modal').scrollTop = 0;
 }
+
+/* ---------------- HACER SEGUIMIENTO (comentario por correo) ---------------- */
+let seguimientoActividadId = null;
+function abrirSeguimiento(id){
+  const a = actividades.find(x => x.ID === id);
+  if(!a) return;
+  seguimientoActividadId = id;
+  const lp = normLP(a.LineaProducto);
+  document.getElementById('seguimiento-resumen').innerHTML =
+    `<strong>${(a.Cliente||'').toString()}</strong> · ${LINEA_PRODUCTO[lp] || lp}<br>${(a.Descripcion||'').toString()}`;
+  document.getElementById('seguimiento-texto').value = '';
+  const st = document.getElementById('seguimiento-status'); st.textContent = ''; st.style.color = '';
+  document.getElementById('seguimiento-enviar').disabled = false;
+  document.getElementById('seguimiento-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('seguimiento-texto').focus(), 50);
+}
+function cerrarSeguimiento(){ document.getElementById('seguimiento-overlay').classList.remove('open'); seguimientoActividadId = null; }
+document.getElementById('seguimiento-close').addEventListener('click', cerrarSeguimiento);
+document.getElementById('seguimiento-cancelar').addEventListener('click', cerrarSeguimiento);
+document.getElementById('seguimiento-enviar').addEventListener('click', async () => {
+  const comentario = document.getElementById('seguimiento-texto').value.trim();
+  const st = document.getElementById('seguimiento-status');
+  if(!comentario){ st.style.color = 'var(--red)'; st.textContent = 'Escribe un comentario antes de enviar.'; return; }
+  const btn = document.getElementById('seguimiento-enviar');
+  btn.disabled = true; st.style.color = ''; st.textContent = 'Enviando...';
+  try{
+    const data = await fetchAppsScript({ accion:'seguimiento_actividad', id: seguimientoActividadId, comentario }, 2);
+    if(!data.ok) throw new Error(data.error || 'Error desconocido');
+    st.style.color = 'var(--teal-dark)';
+    st.textContent = data.destinatarios ? 'Seguimiento enviado ✓' : 'Enviado, pero no hay correos configurados para esta actividad (revisa las pestañas CorreosLinea y CorreosVendedor).';
+    setTimeout(cerrarSeguimiento, data.destinatarios ? 1200 : 3500);
+  }catch(err){
+    console.error(err);
+    st.style.color = 'var(--red)'; st.textContent = 'No se pudo enviar: ' + err.message;
+    btn.disabled = false;
+  }
+});
 
 async function marcarActividadCompletada(id, completada){
   try{
@@ -2780,6 +2838,7 @@ function renderActlinea(){
       <td style="max-width:260px;">${a.Descripcion||''}</td>
       <td>
         <div class="al-actions">
+          ${(esAccion && !done) ? `<button class="al-seg-btn seg-btn" data-id="${a.ID}">Hacer seguimiento</button>` : ''}
           <button class="al-edit-btn" data-id="${a.ID}" data-cliente="${(a.Cliente||'').replace(/"/g,'&quot;')}">Editar</button>
           ${esAccion ? `<button class="al-done-btn ${done?'is-done':''}" data-id="${a.ID}" data-done="${done}">${done ? 'Reabrir' : 'Completar'}</button>` : ''}
           <button class="al-del-btn" data-id="${a.ID}">Eliminar</button>
@@ -2806,6 +2865,10 @@ function renderActlinea(){
       openModal(c);
       iniciarEdicionActividad(btn.dataset.id);
     });
+  });
+
+  tbody.querySelectorAll('.al-seg-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); abrirSeguimiento(btn.dataset.id); });
   });
 
   tbody.querySelectorAll('.al-done-btn').forEach(btn => {
