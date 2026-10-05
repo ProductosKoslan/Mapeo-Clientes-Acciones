@@ -972,10 +972,18 @@ async function fetchAppsScript(payload, intentos){
   for(let i=0; i<intentos; i++){
     try{
       const res = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify(payload) });
-      return await res.json();
+      const txt = await res.text();
+      try{
+        return JSON.parse(txt);
+      }catch(parseErr){
+        // Google devolvió una página HTML: extraemos su texto para mostrar la causa real
+        const limpio = txt.replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<script[\s\S]*?<\/script>/gi,' ')
+                          .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,220);
+        throw new Error('Google respondió con una página de error (HTTP ' + res.status + '): ' + (limpio || 'sin texto'));
+      }
     }catch(err){
       ultimoError = err;
-      if(i < intentos-1) await new Promise(r => setTimeout(r, 600));
+      if(i < intentos-1) await new Promise(r => setTimeout(r, 1500));
     }
   }
   throw ultimoError;
@@ -2442,6 +2450,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
     return;
   }
 
+  let pasoUpload = '';
   btnConfirmarUpload.disabled = true;
   uploadStatus.className = 'busy';
   uploadStatus.textContent = 'Leyendo el archivo...';
@@ -2459,14 +2468,15 @@ btnConfirmarUpload.addEventListener('click', async () => {
     }
 
     if(clientesInfo.rows.length){
+      pasoUpload = 'enviar clientes';
       uploadStatus.textContent = `Enviando ${clientesInfo.rows.length.toLocaleString('es-CL')} clientes a Google Sheets...`;
       const data1 = await fetchAppsScript({ accion:'actualizar_clientes', rows: clientesInfo.rows, adminKey }, 3);
       if(!data1.ok) throw new Error(data1.error || 'Error desconocido al guardar clientes.');
       // El backend conserva automáticamente cualquier cliente que no venga en este Excel
       // (por ejemplo, los agregados manualmente desde "Agregar cliente"), así que volvemos
       // a leer la lista completa ya fusionada en vez de quedarnos solo con lo recién subido.
-      const resLeer = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'leer' }), cache:'no-store' });
-      const dataLeer = await resLeer.json();
+      pasoUpload = 'releer clientes';
+      const dataLeer = await fetchAppsScript({ accion:'leer' }, 3);
       if(dataLeer.ok && dataLeer.clientesData && dataLeer.clientesData.length){
         const rawClientes = dataLeer.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
         clientes = clientesRawToObjects(rawClientes);
@@ -2481,6 +2491,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
       uploadStatus.textContent = `Enviando ${ventasRows.length.toLocaleString('es-CL')} registros de venta a Google Sheets...`;
       // Se envía por tandas: mandar todo de una vez hace que Google responda con una
       // página de error HTML (por tamaño o tiempo) y falle con "Unexpected token '<'".
+      pasoUpload = 'enviar ventas';
       const TANDA = 4000;
       const totalTandas = Math.ceil(ventasRows.length / TANDA);
       for(let t=0; t<totalTandas; t++){
@@ -2498,8 +2509,8 @@ btnConfirmarUpload.addEventListener('click', async () => {
 
     const periodoInput = document.getElementById('upload-periodo').value.trim();
     if(periodoInput){
-      const res3 = await fetch(APPS_SCRIPT_URL, { method:'POST', body: JSON.stringify({ accion:'actualizar_periodo', periodo: periodoInput, adminKey }) });
-      const data3 = await res3.json();
+      pasoUpload = 'guardar período';
+      const data3 = await fetchAppsScript({ accion:'actualizar_periodo', periodo: periodoInput, adminKey }, 3);
       if(data3.ok){ periodoVentas = periodoInput; actualizarLabelsPeriodo(); }
     }
 
@@ -2517,7 +2528,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
     if(!clientesInfo.sinCoords.length) setTimeout(() => uploadOverlay.classList.remove('open'), 1800);  }catch(err){
     console.error(err);
     uploadStatus.className = 'err';
-    uploadStatus.textContent = (err.message === 'Clave de administrador incorrecta.' ? '🔒 ' : '') + 'No se pudo actualizar: ' + err.message;
+    uploadStatus.textContent = (err.message === 'Clave de administrador incorrecta.' ? '🔒 ' : '') + 'No se pudo actualizar (paso: ' + (pasoUpload || 'lectura del archivo') + '): ' + err.message;
   }finally{
     btnConfirmarUpload.disabled = false;
   }
