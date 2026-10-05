@@ -1053,7 +1053,26 @@ function normCiudad(s){
   return s.toString().trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
+// Unifica variantes de una misma división ("Koslan Distribución" / "Koslan Distribucion" /
+// espacios o mayúsculas distintas) para que no aparezcan como canales o clientes duplicados.
+function normDivision(d){
+  d = (d == null ? '' : d).toString().trim().replace(/\s+/g,' ');
+  if(!d) return '';
+  const key = d.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  for(const k of Object.keys(CANAL_MAP)){
+    if(k.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase() === key) return k;
+  }
+  return d;
+}
+
 function clientesRawToObjects(raw){
+  // además de normalizar la división, elimina duplicados exactos de (cliente + ciudad)
+  const vistos = new Set();
+  raw = raw.filter(c => {
+    const k = (c[0]||'') + '||' + (c[1]||'').toString().trim().toLowerCase();
+    if(vistos.has(k)) return false;
+    vistos.add(k); return true;
+  }).map(c => { const r = c.slice(); r[2] = normDivision(c[2]); return r; });
   return raw.map(c => ({
     nombre: c[0], ciudad: c[1], divisionRaw: c[2],
     canal: CANAL_MAP[c[2]] || (c[2] || "Sin canal"),
@@ -2432,7 +2451,7 @@ function procesarArchivoClientes(wb){
     const claveUnica = nombre + '||' + ciudad;
     if(vistos.has(claveUnica)) return;
     vistos.add(claveUnica);
-    const division = (row['Division'] || row['División'] || '').toString().trim();
+    const division = normDivision(row['Division'] || row['División'] || '');
     const coords = COORDS_CIUDAD[normCiudad(ciudad)];
     if(!coords) sinCoords.add(ciudad || '(sin ciudad)');
     const vendedor = vendedorPorClienteUpload[nombre] || '';
@@ -2452,6 +2471,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
 
   let pasoUpload = '';
   let avisoRelectura = false;
+  let notaCoords = '';
   btnConfirmarUpload.disabled = true;
   uploadStatus.className = 'busy';
   uploadStatus.textContent = 'Leyendo el archivo...';
@@ -2464,6 +2484,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
     const ventasRows = await procesarArchivoVentas(wb);
     const clientesInfo = procesarArchivoClientes(wb);
 
+    if(clientesInfo.sinCoords.length){ notaCoords = ` | ATENCIÓN: ${clientesInfo.sinCoords.length} ciudad(es) no reconocidas, sus clientes no se muestran: ` + clientesInfo.sinCoords.slice(0,25).join(', '); console.warn('Ciudades sin coordenadas:', clientesInfo.sinCoords); }
     if(!clientesInfo.rows.length && !ventasRows.length){
       throw new Error('No se encontraron datos válidos (revisa que el archivo tenga las pestañas "Cliente-Ciudad" y/o "Ventas").');
     }
@@ -2495,16 +2516,21 @@ btnConfirmarUpload.addEventListener('click', async () => {
       // Se envía por tandas: mandar todo de una vez hace que Google responda con una
       // página de error HTML (por tamaño o tiempo) y falle con "Unexpected token '<'".
       pasoUpload = 'enviar ventas';
-      const TANDA = 4000;
+      const TANDA = 1500;
       const totalTandas = Math.ceil(ventasRows.length / TANDA);
       for(let t=0; t<totalTandas; t++){
         uploadStatus.textContent = `Enviando ventas a Google Sheets... tanda ${t+1} de ${totalTandas}`;
+        pasoUpload = `enviar ventas, tanda ${t+1} de ${totalTandas}`;
+        // "offset" hace que reintentar una tanda sea seguro: se escribe siempre en la misma
+        // posición de la hoja, así que nunca se duplican filas si Google responde con error
+        // aunque haya alcanzado a guardarla.
         const data2 = await fetchAppsScript({
           accion:'actualizar_ventas',
           rows: ventasRows.slice(t*TANDA, (t+1)*TANDA),
+          offset: t*TANDA,
           reset: t === 0,
           adminKey
-        }, 3);
+        }, 5);
         if(!data2.ok) throw new Error(data2.error || 'Error desconocido al guardar ventas.');
       }
       VENTAS_RAW = ventasSheetRowsToRaw(ventasRows);
@@ -2526,13 +2552,13 @@ btnConfirmarUpload.addEventListener('click', async () => {
     let msg = 'Datos actualizados ✓';
     if(clientesInfo.rows.length) msg += ` — ${clientesInfo.rows.length.toLocaleString('es-CL')} clientes`;
     if(ventasRows.length) msg += ` — ${ventasRows.length.toLocaleString('es-CL')} registros de venta`;
-    if(clientesInfo.sinCoords.length) msg += `. Nota: ${clientesInfo.sinCoords.length} ciudad(es) no reconocidas, esos clientes no aparecerán en el mapa.`;
+    if(clientesInfo.sinCoords.length) msg += notaCoords;
     if(avisoRelectura) msg += '. Aviso: recarga la página (Ctrl+F5) para ver también los clientes agregados manualmente.';
     uploadStatus.textContent = msg;
     if(!clientesInfo.sinCoords.length && !avisoRelectura) setTimeout(() => uploadOverlay.classList.remove('open'), 1800);  }catch(err){
     console.error(err);
     uploadStatus.className = 'err';
-    uploadStatus.textContent = (err.message === 'Clave de administrador incorrecta.' ? '🔒 ' : '') + 'No se pudo actualizar (paso: ' + (pasoUpload || 'lectura del archivo') + '): ' + err.message;
+    uploadStatus.textContent = (err.message === 'Clave de administrador incorrecta.' ? '🔒 ' : '') + 'No se pudo actualizar (paso: ' + (pasoUpload || 'lectura del archivo') + '): ' + err.message + notaCoords;
   }finally{
     btnConfirmarUpload.disabled = false;
   }
