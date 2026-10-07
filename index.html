@@ -2338,62 +2338,99 @@ function ventasDeCliente(c){
   return porId;
 }
 
+function mostrarErrorSync(msg){
+  let b = document.getElementById('sync-error');
+  if(!b){
+    b = document.createElement('div'); b.id = 'sync-error';
+    b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:5000;background:#fff;border:1px solid #c0392b;color:#c0392b;border-radius:10px;padding:10px 14px;font-size:13px;max-width:min(680px,92vw);box-shadow:0 6px 24px rgba(0,0,0,.18);display:flex;gap:12px;align-items:center;';
+    document.body.appendChild(b);
+  }
+  b.innerHTML = '';
+  const t = document.createElement('span'); t.textContent = '⚠ No se pudo sincronizar con Google Sheets: ' + msg + ' — se muestran datos locales, sin actividades.';
+  const r = document.createElement('button'); r.textContent = 'Reintentar'; r.style.cssText = 'border:1px solid #c0392b;background:#fff;color:#c0392b;border-radius:6px;padding:4px 10px;cursor:pointer;';
+  r.onclick = () => { b.remove(); document.getElementById('map-loading').classList.remove('hidden'); cargarActividades(); };
+  b.appendChild(t); b.appendChild(r);
+}
+function setProgresoVentas(txt){
+  let b = document.getElementById('ventas-progreso');
+  if(!txt){ if(b) b.remove(); return; }
+  if(!b){
+    b = document.createElement('div'); b.id = 'ventas-progreso';
+    b.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:4000;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--ink-soft);box-shadow:0 4px 14px rgba(0,0,0,.12);';
+    document.body.appendChild(b);
+  }
+  b.textContent = txt;
+}
+
 async function cargarActividades(){
+  let ventasTotal = 0;
   try{
-    // Leemos por POST (no GET): Google puede cachear las respuestas GET de una
-    // Web App a nivel de su propia infraestructura, incluso con parámetros
-    // distintos en la URL, lo que hacía que actividades recién registradas
-    // "desaparecieran" al reabrir la app. POST nunca se cachea.
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ accion: 'leer' }),
-      cache: 'no-store'
-    });
-    const data = await res.json();
-    if(data.ok){
-      try{
-        actividades = (data.actividades || []).map(a => ({ ...a, LineaProducto: normLP(a.LineaProducto) }));
-        rebuildActividadesIndex();
-      }catch(e){ console.error('Error procesando actividades', e); }
+    // Lectura por POST (no GET) para que Google nunca cachee la respuesta.
+    // Se lee primero lo liviano (clientes, actividades, potencial) y las ventas
+    // —que son decenas de miles de filas— se piden después por partes.
+    const data = await fetchAppsScript({ accion: 'leer', sinVentas: true }, 3);
+    if(!data.ok) throw new Error(data.error || 'respuesta inválida');
+    ventasTotal = Number(data.ventasTotal) || 0;
 
-      try{
-        potencial = (data.potencial || []).map(p => ({ ...p, LineaProducto: normLP(p.LineaProducto) }));
-        rebuildPotencialIndex();
-      }catch(e){ console.error('Error procesando potencial', e); }
+    try{
+      actividades = (data.actividades || []).map(a => ({ ...a, LineaProducto: normLP(a.LineaProducto) }));
+      rebuildActividadesIndex();
+    }catch(e){ console.error('Error procesando actividades', e); }
 
-      try{
-        // si el Sheet ya tiene datos de venta cargados, esos mandan sobre los datos embebidos iniciales
-        if(data.ventas && data.ventas.length){
-          VENTAS_RAW = ventasSheetRowsToRaw(data.ventas);
-        }
-      }catch(e){ console.error('Error procesando ventas', e); }
+    try{
+      potencial = (data.potencial || []).map(p => ({ ...p, LineaProducto: normLP(p.LineaProducto) }));
+      rebuildPotencialIndex();
+    }catch(e){ console.error('Error procesando potencial', e); }
 
-      try{
-        // idem para clientes: si ya se subió una actualización, manda sobre la lista embebida inicial
-        if(data.clientesData && data.clientesData.length){
-          const rawClientes = data.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
-          clientes = clientesRawToObjects(rawClientes);
-          rebuildClienteIndex();
-        }
-      }catch(e){ console.error('Error procesando clientes', e); }
+    try{
+      if(data.clientesData && data.clientesData.length){
+        const rawClientes = data.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
+        clientes = clientesRawToObjects(rawClientes);
+        rebuildClienteIndex();
+      }
+    }catch(e){ console.error('Error procesando clientes', e); }
 
-      try{
-        periodoVentas = data.periodoVentas || '';
-        actualizarLabelsPeriodo();
-      }catch(e){ console.error('Error procesando período de venta', e); }
+    try{
+      periodoVentas = data.periodoVentas || '';
+      actualizarLabelsPeriodo();
+    }catch(e){ console.error('Error procesando período de venta', e); }
 
-      try{ buildCanalDropdowns(); }catch(e){ console.error('Error construyendo chips de canal', e); }
-    }
+    try{ buildCanalDropdowns(); }catch(e){ console.error('Error construyendo chips de canal', e); }
   }catch(err){
     console.error('No se pudo cargar datos desde Google Sheet', err);
+    mostrarErrorSync(err.message || String(err));
   }
 
-  // Estas tres llamadas SIEMPRE deben ejecutarse, pase lo que pase arriba —
-  // así un solo dato corrupto nunca puede dejar el mapa o los filtros vacíos.
+  // Siempre se dibuja el mapa, pase lo que pase arriba.
   try{ recomputeVentaTotals(); }catch(e){ console.error('Error recalculando totales de venta', e); try{ buildDatalistsVentas(); }catch(e2){} }
   try{ refresh(); }catch(e){ console.error('Error al dibujar el mapa', e); }
   refrescarTamanoMapa();
   document.getElementById('map-loading').classList.add('hidden');
+
+  // Ventas por partes, en segundo plano
+  if(ventasTotal > 0){
+    try{
+      const LIM = 6000;
+      let todas = [];
+      for(let off=0; off<ventasTotal; off+=LIM){
+        setProgresoVentas(`Cargando ventas… ${Math.min(100, Math.round(off*100/ventasTotal))}%`);
+        const d = await fetchAppsScript({ accion:'leer_ventas', offset: off, limit: LIM }, 4);
+        if(!d.ok) throw new Error(d.error || 'respuesta inválida');
+        todas = todas.concat(d.ventas || []);
+      }
+      if(todas.length){
+        VENTAS_RAW = ventasSheetRowsToRaw(todas);
+        try{ recomputeVentaTotals(); }catch(e){ console.error(e); }
+        try{ refresh(); }catch(e){ console.error(e); }
+        if(currentClient){ try{ renderVentas(); }catch(e){} }
+      }
+      setProgresoVentas('');
+    }catch(err){
+      console.error('No se pudieron cargar las ventas', err);
+      setProgresoVentas('');
+      mostrarErrorSync('ventas: ' + (err.message || err));
+    }
+  }
 }
 
 cargarActividades();
@@ -2557,7 +2594,7 @@ btnConfirmarUpload.addEventListener('click', async () => {
       // a leer la lista completa ya fusionada en vez de quedarnos solo con lo recién subido.
       pasoUpload = 'releer clientes';
       let dataLeer = null;
-      try{ dataLeer = await fetchAppsScript({ accion:'leer' }, 3); }
+      try{ dataLeer = await fetchAppsScript({ accion:'leer', sinVentas:true }, 3); }
       catch(e){ console.warn('No se pudo releer la lista fusionada; se usa la del Excel. Recarga la página para ver clientes agregados manualmente.', e); avisoRelectura = true; }
       if(dataLeer && dataLeer.ok && dataLeer.clientesData && dataLeer.clientesData.length){
         const rawClientes = dataLeer.clientesData.map(r => [r[0], r[1], r[2], Number(r[3]), Number(r[4]), r[5] || '']);
